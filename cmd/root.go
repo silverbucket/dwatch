@@ -10,11 +10,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is set at build time via -ldflags "-X dwatch/cmd.Version=x.y.z".
+var Version = "dev"
+
 var dataDir string
 
 var rootCmd = &cobra.Command{
-	Use:   "dwatch",
-	Short: "Track disk space growth over time",
+	Use:     "dwatch",
+	Short:   "Track disk space growth over time",
+	Version: Version,
 	Long: `dwatch snapshots directory sizes and shows you what's growing.
 
 Quick start:
