@@ -1,15 +1,17 @@
 VERSION ?= 1.0.0
+DESTDIR ?= /usr/local/bin
 LDFLAGS  = -ldflags "-X dwatch/cmd.Version=$(VERSION)"
 
 build:
 	go build $(LDFLAGS) -o dwatch .
+	-codesign --sign - dwatch 2>/dev/null
 
 install: build
-	cp dwatch /usr/local/bin/dwatch
-	@echo "Installed dwatch $(VERSION) to /usr/local/bin/dwatch"
+	cp dwatch $(DESTDIR)/dwatch
+	@echo "Installed dwatch $(VERSION) to $(DESTDIR)/dwatch"
 
 uninstall:
-	rm -f /usr/local/bin/dwatch
+	rm -f $(DESTDIR)/dwatch
 
 clean:
 	rm -f dwatch
