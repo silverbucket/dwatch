@@ -89,6 +89,9 @@ func runDiff(_ *cobra.Command, _ []string) error {
 
 	for path, after := range latest.Dirs {
 		seen[path] = true
+		if isSkipped(path) {
+			continue
+		}
 		before := old.Dirs[path]
 		delta := after - before
 		if !diffAll && int64(math.Abs(float64(delta))) < minChange {
@@ -101,15 +104,16 @@ func runDiff(_ *cobra.Command, _ []string) error {
 		rows = append(rows, row{path, before, after, delta, pct})
 	}
 
-	// dirs in old but not latest (deleted/empty)
+	// dirs in old but not latest (deleted or now skipped)
 	for path, before := range old.Dirs {
-		if !seen[path] {
-			delta := -before
-			if !diffAll && int64(math.Abs(float64(delta))) < minChange {
-				continue
-			}
-			rows = append(rows, row{path, before, 0, delta, -100})
+		if seen[path] || isSkipped(path) {
+			continue
 		}
+		delta := -before
+		if !diffAll && int64(math.Abs(float64(delta))) < minChange {
+			continue
+		}
+		rows = append(rows, row{path, before, 0, delta, -100})
 	}
 
 	sort.Slice(rows, func(i, j int) bool {

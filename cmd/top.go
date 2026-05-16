@@ -74,6 +74,9 @@ func runTop(_ *cobra.Command, _ []string) error {
 
 	var entries []entry
 	for path, after := range latest.Dirs {
+		if isSkipped(path) {
+			continue
+		}
 		before := old.Dirs[path]
 		growth := after - before
 		if growth <= 0 {

@@ -51,6 +51,9 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	largest := make([]entry, 0, len(latest.Dirs))
 	for p, s := range latest.Dirs {
+		if isSkipped(p) {
+			continue
+		}
 		largest = append(largest, entry{p, s})
 	}
 	sort.Slice(largest, func(i, j int) bool { return largest[i].size > largest[j].size })
@@ -113,6 +116,9 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	var movers []chgEntry
 	for path, after := range latest.Dirs {
+		if isSkipped(path) {
+			continue
+		}
 		before := prev.Dirs[path]
 		delta := after - before
 		if delta > 1<<20 { // only show dirs that grew >1MB

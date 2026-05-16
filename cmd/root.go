@@ -81,6 +81,16 @@ func parseSince(s string) (time.Time, error) {
 	return t, nil
 }
 
+// isSkipped reports whether path is covered by the configured skip list.
+func isSkipped(path string) bool {
+	for _, skip := range cfg.ScanSkip {
+		if path == skip || strings.HasPrefix(path, skip+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func parseBytes(s string) (int64, error) {
 	if len(s) < 2 {
 		return 0, fmt.Errorf("invalid size %q — use 100mb, 1gb, 500kb", s)

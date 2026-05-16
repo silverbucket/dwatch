@@ -77,6 +77,9 @@ func runAlert(_ *cobra.Command, _ []string) error {
 
 	var hits []hit
 	for path, after := range latest.Dirs {
+		if isSkipped(path) {
+			continue
+		}
 		before := old.Dirs[path]
 		delta := after - before
 		if delta >= threshold {
