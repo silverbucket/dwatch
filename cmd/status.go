@@ -17,8 +17,11 @@ var statusCmd = &cobra.Command{
 	RunE:  runStatus,
 }
 
+var statusSince string
+
 func init() {
 	rootCmd.AddCommand(statusCmd)
+	statusCmd.Flags().StringVar(&statusSince, "since", "", "compare growth over this window (e.g. 1h, 2d, 1w, 1m)")
 }
 
 func runStatus(_ *cobra.Command, _ []string) error {
@@ -68,15 +71,41 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	)
 	fmt.Println()
 
-	// Changes since previous snapshot
+	// Find baseline snapshot for growth comparison.
 	if len(snaps) < 2 {
 		fmt.Println(ui.Dim("  (Take more snapshots to see growth trends)"))
 		fmt.Println()
 		return nil
 	}
 
-	prev := snaps[len(snaps)-2]
-	span := latest.TakenAt.Sub(prev.TakenAt)
+	candidates := snaps[:len(snaps)-1] // all except latest
+	var prev *store.Snapshot
+	var sectionLabel string
+
+	if statusSince != "" {
+		cutoff, err := parseSince(statusSince)
+		if err != nil {
+			return err
+		}
+		// Latest candidate at or before the cutoff.
+		for _, s := range candidates {
+			if !s.TakenAt.After(cutoff) {
+				prev = s
+			}
+		}
+		if prev == nil {
+			// No snapshot old enough; use oldest and note it.
+			prev = candidates[0]
+			sectionLabel = fmt.Sprintf("  Growth since %s %s:", statusSince,
+				ui.Dim("(oldest snapshot: "+formatDuration(time.Since(prev.TakenAt).Hours()/24)+")"))
+		} else {
+			sectionLabel = fmt.Sprintf("  Growth since %s:", statusSince)
+		}
+	} else {
+		prev = candidates[len(candidates)-1]
+		span := latest.TakenAt.Sub(prev.TakenAt)
+		sectionLabel = fmt.Sprintf("  Growth since last scan %s:", ui.Dim("("+formatDuration(span.Hours()/24)+")"))
+	}
 
 	type chgEntry struct {
 		path  string
@@ -95,7 +124,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		movers = movers[:8]
 	}
 
-	fmt.Printf(ui.Header("  Growth since last scan")+" %s:\n", ui.Dim("("+formatDuration(span.Hours()/24)+")"))
+	fmt.Println(ui.Header(sectionLabel))
 	if len(movers) == 0 {
 		fmt.Println(ui.Dim("  No significant changes."))
 	} else {
