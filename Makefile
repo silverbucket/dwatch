@@ -8,6 +8,13 @@ build:
 
 install: build
 	cp dwatch $(DESTDIR)/dwatch
+	@mkdir -p $(HOME)/.dwatch
+	@if [ ! -f $(HOME)/.dwatch/dwatch.conf ]; then \
+		cp example.dwatch.conf $(HOME)/.dwatch/dwatch.conf; \
+		echo "Installed default config to $(HOME)/.dwatch/dwatch.conf"; \
+	else \
+		echo "Config already exists at $(HOME)/.dwatch/dwatch.conf (skipping)"; \
+	fi
 	@echo "Installed dwatch $(VERSION) to $(DESTDIR)/dwatch"
 
 uninstall:

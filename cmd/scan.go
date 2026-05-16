@@ -32,9 +32,9 @@ var (
 
 func init() {
 	rootCmd.AddCommand(scanCmd)
-	scanCmd.Flags().StringVarP(&scanRoot, "root", "r", "/", "root directory to scan")
-	scanCmd.Flags().IntVarP(&scanDepth, "depth", "n", 5, "max directory depth to track")
-	scanCmd.Flags().StringArrayVarP(&scanSkip, "skip", "s", scanner.DefaultSkipPaths(), "paths to skip")
+	scanCmd.Flags().StringVarP(&scanRoot, "root", "r", cfg.ScanRoot, "root directory to scan")
+	scanCmd.Flags().IntVarP(&scanDepth, "depth", "n", cfg.ScanDepth, "max directory depth to track")
+	scanCmd.Flags().StringArrayVarP(&scanSkip, "skip", "s", cfg.ScanSkip, "paths to skip")
 	scanCmd.Flags().BoolVarP(&scanQuiet, "quiet", "q", false, "suppress output (for cron use)")
 	scanCmd.Flags().IntVar(&scanShow, "show", 10, "number of largest dirs to display after scan (0 = all)")
 }

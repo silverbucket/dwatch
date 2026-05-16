@@ -3,17 +3,23 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"dwatch/internal/config"
 )
 
 // Version is set at build time via -ldflags "-X dwatch/cmd.Version=x.y.z".
 var Version = "dev"
 
-var dataDir string
+var (
+	dataDir string
+	cfg     config.Config
+)
 
 var rootCmd = &cobra.Command{
 	Use:     "dwatch",
@@ -38,7 +44,13 @@ func Execute() {
 
 func init() {
 	home, _ := os.UserHomeDir()
-	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "d", home+"/.dwatch", "directory to store snapshots")
+	var err error
+	cfg, err = config.Load(filepath.Join(home, ".dwatch", "dwatch.conf"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dwatch: warning: could not read config: %v\n", err)
+		cfg = config.Defaults()
+	}
+	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "d", cfg.DataDir, "directory to store snapshots")
 }
 
 // parseSince converts a human duration string to an absolute time.

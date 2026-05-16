@@ -2,29 +2,13 @@ package scanner
 
 import (
 	"io/fs"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 )
 
 type Result struct {
 	Dirs map[string]int64
-}
-
-func DefaultSkipPaths() []string {
-	home, _ := os.UserHomeDir()
-	if runtime.GOOS == "darwin" {
-		return []string{
-			"/dev",
-			"/System/Volumes",
-			"/net",
-			"/home",
-			filepath.Join(home, ".orbstack"),
-		}
-	}
-	return []string{"/proc", "/sys", "/dev", "/run"}
 }
 
 type inodeKey struct{ dev, ino uint64 }
