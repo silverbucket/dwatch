@@ -4,6 +4,8 @@ Track disk space growth over time. `dwatch` takes periodic snapshots of director
 
 Works on macOS and Linux.
 
+![dwatch demo](demo/demo.gif)
+
 
 ## Install
 
