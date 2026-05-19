@@ -155,7 +155,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 
 	candidates := snaps[:len(snaps)-1] // all except latest
 	var prev *store.Snapshot
-	var sectionLabel string
+	var growthLabel, freedLabel string
 
 	if statusSince != "" {
 		cutoff, err := parseSince(statusSince)
@@ -171,18 +171,22 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		if prev == nil {
 			// No snapshot old enough; use oldest and note it.
 			prev = candidates[0]
-			sectionLabel = fmt.Sprintf("  Growth since %s %s:", statusSince,
-				ui.Dim("(oldest snapshot: "+formatDuration(time.Since(prev.TakenAt).Hours()/24)+")"))
+			note := ui.Dim("(oldest snapshot: " + formatDuration(time.Since(prev.TakenAt).Hours()/24) + ")")
+			growthLabel = fmt.Sprintf("  Growth since %s %s:", statusSince, note)
+			freedLabel = fmt.Sprintf("  Freed since %s %s:", statusSince, note)
 		} else {
-			sectionLabel = fmt.Sprintf("  Growth since %s:", statusSince)
+			growthLabel = fmt.Sprintf("  Growth since %s:", statusSince)
+			freedLabel = fmt.Sprintf("  Freed since %s:", statusSince)
 		}
 	} else {
 		prev = candidates[len(candidates)-1]
 		span := latest.TakenAt.Sub(prev.TakenAt)
-		sectionLabel = fmt.Sprintf("  Growth since last scan %s:", ui.Dim("("+formatDuration(span.Hours()/24)+")"))
+		note := ui.Dim("(" + formatDuration(span.Hours()/24) + ")")
+		growthLabel = fmt.Sprintf("  Growth since last scan %s:", note)
+		freedLabel = fmt.Sprintf("  Freed since last scan %s:", note)
 	}
 
-	var movers []chgEntry
+	var growers, shrinkers []chgEntry
 	for path, after := range latest.Dirs {
 		if isSkipped(path) {
 			continue
@@ -190,24 +194,34 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		before := prev.Dirs[path]
 		delta := after - before
 		if delta > 1<<20 {
-			movers = append(movers, chgEntry{path, delta})
+			growers = append(growers, chgEntry{path, delta})
+		} else if delta < -(1 << 20) {
+			shrinkers = append(shrinkers, chgEntry{path, delta})
 		}
 	}
-	movers = leafFilter(movers)
-	sort.Slice(movers, func(i, j int) bool { return movers[i].delta > movers[j].delta })
-	if len(movers) > 8 {
-		movers = movers[:8]
+
+	growers = leafFilter(growers)
+	shrinkers = leafFilter(shrinkers)
+
+	sort.Slice(growers, func(i, j int) bool { return growers[i].delta > growers[j].delta })
+	if len(growers) > 8 {
+		growers = growers[:8]
 	}
 
-	fmt.Println(ui.Header(sectionLabel))
-	if len(movers) == 0 {
-		fmt.Println(ui.Dim("  No significant changes."))
+	sort.Slice(shrinkers, func(i, j int) bool { return shrinkers[i].delta < shrinkers[j].delta })
+	if len(shrinkers) > 5 {
+		shrinkers = shrinkers[:5]
+	}
+
+	fmt.Println(ui.Header(growthLabel))
+	if len(growers) == 0 {
+		fmt.Println(ui.Dim("  No significant growth."))
 	} else {
 		ui.PrintTable(
 			[]ui.Column{{Header: "Directory"}, {Header: "Growth", RightAlign: true}},
 			func() [][]string {
-				rows := make([][]string, len(movers))
-				for i, e := range movers {
+				rows := make([][]string, len(growers))
+				for i, e := range growers {
 					rows[i] = []string{e.path, ui.FormatChange(e.delta)}
 				}
 				return rows
@@ -215,5 +229,21 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		)
 	}
 	fmt.Println()
+
+	if len(shrinkers) > 0 {
+		fmt.Println(ui.Header(freedLabel))
+		ui.PrintTable(
+			[]ui.Column{{Header: "Directory"}, {Header: "Freed", RightAlign: true}},
+			func() [][]string {
+				rows := make([][]string, len(shrinkers))
+				for i, e := range shrinkers {
+					rows[i] = []string{e.path, ui.FormatChange(e.delta)}
+				}
+				return rows
+			}(),
+		)
+		fmt.Println()
+	}
+
 	return nil
 }
