@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"golang.org/x/sys/unix"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,11 +20,35 @@ var statusCmd = &cobra.Command{
 
 var statusSince string
 
+// snapshot window for growth comparison (examples: `1h`, `2d`, `1w`, `1m`).
 func init() {
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().StringVar(&statusSince, "since", "", "compare growth over this window (e.g. 1h, 2d, 1w, 1m)")
 }
 
+// diskUsage reports the total, used, and available bytes for the filesystem containing path.
+// It returns the total size, used size, and available size (in bytes). If retrieving filesystem
+// statistics fails, the returned error describes the failure.
+func diskUsage(path string) (total, used, avail uint64, err error) {
+	var stat unix.Statfs_t
+	if err = unix.Statfs(path, &stat); err != nil {
+		return
+	}
+	bsize := uint64(stat.Bsize)
+	total = stat.Blocks * bsize
+	avail = stat.Bavail * bsize
+	used = (stat.Blocks - stat.Bfree) * bsize
+	return
+}
+
+// runStatus prints a concise status report for the latest snapshot and growth since a baseline.
+//
+// It loads stored snapshots, displays the latest snapshot's timestamp, root, depth, tracked
+// directory count and total snapshots, and — when available — disk usage for the snapshot root.
+// It then shows the top current largest directories and, if a prior snapshot exists, the biggest
+// growths since either the previous snapshot or the snapshot selected by the `--since` flag.
+// It returns an error if snapshot listing fails, if no snapshots exist, or if the `--since`
+// flag cannot be parsed.
 func runStatus(_ *cobra.Command, _ []string) error {
 	snaps, err := store.List(dataDir)
 	if err != nil {
@@ -42,7 +67,14 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		formatDuration(age.Hours()/24))
 	fmt.Printf("  Root:      %s   Depth: %d\n", latest.Root, latest.Depth)
 	fmt.Printf("  Tracked:   %s directories\n", ui.Bold(ui.Num(len(latest.Dirs))))
-	fmt.Printf("  Snapshots: %s total\n\n", ui.Num(len(snaps)))
+	fmt.Printf("  Snapshots: %s total\n", ui.Num(len(snaps)))
+	if total, used, avail, err := diskUsage(latest.Root); err == nil {
+		fmt.Printf("  Disk:      %s used · %s free  (%s total)\n",
+			ui.FormatSize(int64(used)),
+			ui.FormatSize(int64(avail)),
+			ui.FormatSize(int64(total)))
+	}
+	fmt.Println()
 
 	// Top 8 largest current dirs
 	type entry struct {
