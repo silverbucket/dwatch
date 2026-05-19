@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"golang.org/x/sys/unix"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/spf13/cobra"
 
@@ -47,12 +48,14 @@ type chgEntry struct {
 	delta int64
 }
 
-// leafFilter removes any entry that has a child also in the set — those are
-// ancestor rollups, not the actual source of the change.
+// leafFilter removes entries whose change is fully accounted for by the sum of
+// their descendants in the set. A parent is kept when descendants explain less
+// than its total delta (meaning growth/shrink at this level is not attributable
+// to any tracked child alone).
 func leafFilter(entries []chgEntry) []chgEntry {
-	paths := make(map[string]bool, len(entries))
+	deltas := make(map[string]int64, len(entries))
 	for _, e := range entries {
-		paths[e.path] = true
+		deltas[e.path] = e.delta
 	}
 	out := make([]chgEntry, 0, len(entries))
 	for _, e := range entries {
@@ -60,16 +63,20 @@ func leafFilter(entries []chgEntry) []chgEntry {
 		if prefix != "/" {
 			prefix += "/"
 		}
-		hasChild := false
-		for other := range paths {
+		var childSum int64
+		for other, d := range deltas {
 			if other != e.path && strings.HasPrefix(other, prefix) {
-				hasChild = true
-				break
+				childSum += d
 			}
 		}
-		if !hasChild {
-			out = append(out, e)
+		// Drop only when descendants fully account for the change.
+		if e.delta > 0 && childSum >= e.delta {
+			continue
 		}
+		if e.delta < 0 && childSum <= e.delta {
+			continue
+		}
+		out = append(out, e)
 	}
 	return out
 }
