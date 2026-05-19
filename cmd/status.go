@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
-	"syscall"
+	"golang.org/x/sys/unix"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -30,8 +30,8 @@ func init() {
 // It returns the total size, used size, and available size (in bytes). If retrieving filesystem
 // statistics fails, the returned error describes the failure.
 func diskUsage(path string) (total, used, avail uint64, err error) {
-	var stat syscall.Statfs_t
-	if err = syscall.Statfs(path, &stat); err != nil {
+	var stat unix.Statfs_t
+	if err = unix.Statfs(path, &stat); err != nil {
 		return
 	}
 	bsize := uint64(stat.Bsize)
