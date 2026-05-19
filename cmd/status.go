@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"golang.org/x/sys/unix"
 	"time"
 
@@ -39,6 +40,38 @@ func diskUsage(path string) (total, used, avail uint64, err error) {
 	avail = stat.Bavail * bsize
 	used = (stat.Blocks - stat.Bfree) * bsize
 	return
+}
+
+type chgEntry struct {
+	path  string
+	delta int64
+}
+
+// leafFilter removes any entry that has a child also in the set — those are
+// ancestor rollups, not the actual source of the change.
+func leafFilter(entries []chgEntry) []chgEntry {
+	paths := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		paths[e.path] = true
+	}
+	out := make([]chgEntry, 0, len(entries))
+	for _, e := range entries {
+		prefix := e.path
+		if prefix != "/" {
+			prefix += "/"
+		}
+		hasChild := false
+		for other := range paths {
+			if other != e.path && strings.HasPrefix(other, prefix) {
+				hasChild = true
+				break
+			}
+		}
+		if !hasChild {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // runStatus prints a concise status report for the latest snapshot and growth since a baseline.
@@ -142,10 +175,6 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		sectionLabel = fmt.Sprintf("  Growth since last scan %s:", ui.Dim("("+formatDuration(span.Hours()/24)+")"))
 	}
 
-	type chgEntry struct {
-		path  string
-		delta int64
-	}
 	var movers []chgEntry
 	for path, after := range latest.Dirs {
 		if isSkipped(path) {
@@ -153,10 +182,11 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		}
 		before := prev.Dirs[path]
 		delta := after - before
-		if delta > 1<<20 { // only show dirs that grew >1MB
+		if delta > 1<<20 {
 			movers = append(movers, chgEntry{path, delta})
 		}
 	}
+	movers = leafFilter(movers)
 	sort.Slice(movers, func(i, j int) bool { return movers[i].delta > movers[j].delta })
 	if len(movers) > 8 {
 		movers = movers[:8]
