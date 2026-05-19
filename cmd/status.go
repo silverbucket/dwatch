@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -24,6 +25,18 @@ func init() {
 	statusCmd.Flags().StringVar(&statusSince, "since", "", "compare growth over this window (e.g. 1h, 2d, 1w, 1m)")
 }
 
+func diskUsage(path string) (total, used, avail uint64, err error) {
+	var stat syscall.Statfs_t
+	if err = syscall.Statfs(path, &stat); err != nil {
+		return
+	}
+	bsize := uint64(stat.Bsize)
+	total = stat.Blocks * bsize
+	avail = stat.Bavail * bsize
+	used = (stat.Blocks - stat.Bfree) * bsize
+	return
+}
+
 func runStatus(_ *cobra.Command, _ []string) error {
 	snaps, err := store.List(dataDir)
 	if err != nil {
@@ -42,7 +55,14 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		formatDuration(age.Hours()/24))
 	fmt.Printf("  Root:      %s   Depth: %d\n", latest.Root, latest.Depth)
 	fmt.Printf("  Tracked:   %s directories\n", ui.Bold(ui.Num(len(latest.Dirs))))
-	fmt.Printf("  Snapshots: %s total\n\n", ui.Num(len(snaps)))
+	fmt.Printf("  Snapshots: %s total\n", ui.Num(len(snaps)))
+	if total, used, avail, err := diskUsage(latest.Root); err == nil {
+		fmt.Printf("  Disk:      %s used · %s free  (%s total)\n",
+			ui.FormatSize(int64(used)),
+			ui.FormatSize(int64(avail)),
+			ui.FormatSize(int64(total)))
+	}
+	fmt.Println()
 
 	// Top 8 largest current dirs
 	type entry struct {
