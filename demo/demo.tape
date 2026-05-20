@@ -7,14 +7,15 @@ Set Theme "Catppuccin Mocha"
 Set Shell "bash"
 Set Padding 20
 
-# Invisible setup: seed demo data, set a neutral prompt, alias dwatch, then clear
+# Invisible setup: build binary, seed demo data, set a neutral prompt, alias dwatch, then clear
 # Run from the project root: vhs demo/demo.tape
 Hide
-Type "mkdir -p /tmp/dwatch-demo && cp demo/data/*.json /tmp/dwatch-demo/"
+Type "go build -o /tmp/dwatch-demo-bin . && mkdir -p /tmp/dwatch-demo && cp demo/data/*.json /tmp/dwatch-demo/"
 Enter
+Sleep 10s
 Type "export PS1='$ '"
 Enter
-Type "alias dwatch='/usr/local/bin/dwatch --data-dir /tmp/dwatch-demo'"
+Type "alias dwatch='/tmp/dwatch-demo-bin --data-dir /tmp/dwatch-demo'"
 Enter
 Sleep 400ms
 Ctrl+L
