@@ -92,10 +92,12 @@ Quick overview: largest directories in the latest snapshot and what grew.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--since` | — | Compare over this window instead of since the previous scan |
+| `-l, --limit` | `5` | Max entries per section (0 = all) |
 
 ```sh
 dwatch status
 dwatch status --since 1w
+dwatch status --limit 10
 ```
 
 

@@ -21,11 +21,12 @@ var statusCmd = &cobra.Command{
 }
 
 var statusSince string
+var statusLimit int
 
-// snapshot window for growth comparison (examples: `1h`, `2d`, `1w`, `1m`).
 func init() {
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().StringVar(&statusSince, "since", "", "compare growth over this window (e.g. 1h, 2d, 1w, 1m)")
+	statusCmd.Flags().IntVarP(&statusLimit, "limit", "l", 5, "max entries per section")
 }
 
 // diskUsage reports the total, used, and available bytes for the filesystem containing path.
@@ -43,6 +44,7 @@ func diskUsage(path string) (total, used, avail uint64, err error) {
 	return
 }
 
+// chgEntry pairs a directory path with the signed byte change between two snapshots.
 type chgEntry struct {
 	path  string
 	delta int64
@@ -86,10 +88,14 @@ func leafFilter(entries []chgEntry) []chgEntry {
 // It loads stored snapshots, displays the latest snapshot's timestamp, root, depth, tracked
 // directory count and total snapshots, and — when available — disk usage for the snapshot root.
 // It then shows the top current largest directories and, if a prior snapshot exists, the biggest
-// growths since either the previous snapshot or the snapshot selected by the `--since` flag.
-// It returns an error if snapshot listing fails, if no snapshots exist, or if the `--since`
-// flag cannot be parsed.
+// growths and freed space since either the previous snapshot or the snapshot selected by
+// `--since`. Each section is capped at statusLimit entries (--limit flag, default 5).
+// It returns an error if snapshot listing fails, if no snapshots exist, if --limit is negative,
+// or if the --since flag cannot be parsed.
 func runStatus(_ *cobra.Command, _ []string) error {
+	if statusLimit < 0 {
+		return fmt.Errorf("--limit must be >= 0")
+	}
 	snaps, err := store.List(dataDir)
 	if err != nil {
 		return fmt.Errorf("could not read snapshots: %w", err)
@@ -116,7 +122,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Println()
 
-	// Top 8 largest leaf directories (ancestors filtered out).
+	// Top statusLimit largest leaf directories (ancestors filtered out).
 	type entry struct {
 		path string
 		size int64
@@ -151,8 +157,8 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 
 	sort.Slice(largest, func(i, j int) bool { return largest[i].size > largest[j].size })
-	if len(largest) > 8 {
-		largest = largest[:8]
+	if len(largest) > statusLimit {
+		largest = largest[:statusLimit]
 	}
 
 	fmt.Println(ui.Header("  Current largest:"))
@@ -226,13 +232,13 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	shrinkers = leafFilter(shrinkers)
 
 	sort.Slice(growers, func(i, j int) bool { return growers[i].delta > growers[j].delta })
-	if len(growers) > 8 {
-		growers = growers[:8]
+	if len(growers) > statusLimit {
+		growers = growers[:statusLimit]
 	}
 
 	sort.Slice(shrinkers, func(i, j int) bool { return shrinkers[i].delta < shrinkers[j].delta })
-	if len(shrinkers) > 5 {
-		shrinkers = shrinkers[:5]
+	if len(shrinkers) > statusLimit {
+		shrinkers = shrinkers[:statusLimit]
 	}
 
 	fmt.Println(ui.Header(growthLabel))
