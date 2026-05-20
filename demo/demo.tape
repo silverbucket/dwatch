@@ -23,12 +23,21 @@ Show
 
 Sleep 600ms
 
-# --- status: snapshot overview + recent growth ---
+# --- status: snapshot overview + largest dirs + growth + freed ---
 Type "dwatch status"
 Sleep 150ms
 Enter
+Sleep 2.5s
+
+Ctrl+L
+Sleep 400ms
+
+# --- status --limit: show more entries ---
+Type "dwatch status --limit 10"
+Sleep 150ms
+Enter
 Sleep 2s
-Sleep 1.5s
+Sleep 2s
 
 Ctrl+L
 Sleep 400ms
