@@ -44,6 +44,7 @@ func diskUsage(path string) (total, used, avail uint64, err error) {
 	return
 }
 
+// chgEntry pairs a directory path with the signed byte change between two snapshots.
 type chgEntry struct {
 	path  string
 	delta int64
@@ -87,9 +88,10 @@ func leafFilter(entries []chgEntry) []chgEntry {
 // It loads stored snapshots, displays the latest snapshot's timestamp, root, depth, tracked
 // directory count and total snapshots, and — when available — disk usage for the snapshot root.
 // It then shows the top current largest directories and, if a prior snapshot exists, the biggest
-// growths since either the previous snapshot or the snapshot selected by the `--since` flag.
-// It returns an error if snapshot listing fails, if no snapshots exist, or if the `--since`
-// flag cannot be parsed.
+// growths and freed space since either the previous snapshot or the snapshot selected by
+// `--since`. Each section is capped at statusLimit entries (--limit flag, default 5).
+// It returns an error if snapshot listing fails, if no snapshots exist, if --limit is negative,
+// or if the --since flag cannot be parsed.
 func runStatus(_ *cobra.Command, _ []string) error {
 	if statusLimit < 0 {
 		return fmt.Errorf("--limit must be >= 0")
@@ -120,7 +122,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Println()
 
-	// Top 8 largest leaf directories (ancestors filtered out).
+	// Top statusLimit largest leaf directories (ancestors filtered out).
 	type entry struct {
 		path string
 		size int64
