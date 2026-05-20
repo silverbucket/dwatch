@@ -27,8 +27,7 @@ Sleep 600ms
 Type "dwatch status"
 Sleep 150ms
 Enter
-Sleep 2s
-Sleep 2s
+Sleep 2.5s
 
 Ctrl+L
 Sleep 400ms
