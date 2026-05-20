@@ -140,6 +140,11 @@ func runStatus(_ *cobra.Command, _ []string) error {
 			prefix += "/"
 		}
 		pos := sort.SearchStrings(sortedPaths, prefix)
+		// SearchStrings can land on the path itself when prefix == path (root "/").
+		// Advance past it so we're only checking for actual children.
+		if pos < len(sortedPaths) && sortedPaths[pos] == e.path {
+			pos++
+		}
 		if pos >= len(sortedPaths) || !strings.HasPrefix(sortedPaths[pos], prefix) {
 			largest = append(largest, e)
 		}
