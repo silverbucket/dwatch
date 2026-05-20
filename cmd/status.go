@@ -21,11 +21,12 @@ var statusCmd = &cobra.Command{
 }
 
 var statusSince string
+var statusLimit int
 
-// snapshot window for growth comparison (examples: `1h`, `2d`, `1w`, `1m`).
 func init() {
 	rootCmd.AddCommand(statusCmd)
 	statusCmd.Flags().StringVar(&statusSince, "since", "", "compare growth over this window (e.g. 1h, 2d, 1w, 1m)")
+	statusCmd.Flags().IntVarP(&statusLimit, "limit", "l", 5, "max entries per section")
 }
 
 // diskUsage reports the total, used, and available bytes for the filesystem containing path.
@@ -151,8 +152,8 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 
 	sort.Slice(largest, func(i, j int) bool { return largest[i].size > largest[j].size })
-	if len(largest) > 8 {
-		largest = largest[:8]
+	if len(largest) > statusLimit {
+		largest = largest[:statusLimit]
 	}
 
 	fmt.Println(ui.Header("  Current largest:"))
@@ -226,13 +227,13 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	shrinkers = leafFilter(shrinkers)
 
 	sort.Slice(growers, func(i, j int) bool { return growers[i].delta > growers[j].delta })
-	if len(growers) > 8 {
-		growers = growers[:8]
+	if len(growers) > statusLimit {
+		growers = growers[:statusLimit]
 	}
 
 	sort.Slice(shrinkers, func(i, j int) bool { return shrinkers[i].delta < shrinkers[j].delta })
-	if len(shrinkers) > 5 {
-		shrinkers = shrinkers[:5]
+	if len(shrinkers) > statusLimit {
+		shrinkers = shrinkers[:statusLimit]
 	}
 
 	fmt.Println(ui.Header(growthLabel))
