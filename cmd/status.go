@@ -91,6 +91,9 @@ func leafFilter(entries []chgEntry) []chgEntry {
 // It returns an error if snapshot listing fails, if no snapshots exist, or if the `--since`
 // flag cannot be parsed.
 func runStatus(_ *cobra.Command, _ []string) error {
+	if statusLimit < 0 {
+		return fmt.Errorf("--limit must be >= 0")
+	}
 	snaps, err := store.List(dataDir)
 	if err != nil {
 		return fmt.Errorf("could not read snapshots: %w", err)
