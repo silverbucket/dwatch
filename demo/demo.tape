@@ -2,7 +2,7 @@ Output demo/demo.gif
 
 Set FontSize 14
 Set Width 960
-Set Height 620
+Set Height 740
 Set Theme "Catppuccin Mocha"
 Set Shell "bash"
 Set Padding 20
@@ -23,12 +23,12 @@ Show
 
 Sleep 600ms
 
-# --- status: snapshot overview + recent growth ---
+# --- status: snapshot overview + largest dirs + growth + freed ---
 Type "dwatch status"
 Sleep 150ms
 Enter
 Sleep 2s
-Sleep 1.5s
+Sleep 2.5s
 
 Ctrl+L
 Sleep 400ms
