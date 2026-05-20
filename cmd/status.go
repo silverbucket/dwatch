@@ -116,18 +116,35 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Println()
 
-	// Top 8 largest current dirs
+	// Top 8 largest leaf directories (ancestors filtered out).
 	type entry struct {
 		path string
 		size int64
 	}
-	largest := make([]entry, 0, len(latest.Dirs))
+	allDirs := make([]entry, 0, len(latest.Dirs))
+	sortedPaths := make([]string, 0, len(latest.Dirs))
 	for p, s := range latest.Dirs {
 		if isSkipped(p) {
 			continue
 		}
-		largest = append(largest, entry{p, s})
+		allDirs = append(allDirs, entry{p, s})
+		sortedPaths = append(sortedPaths, p)
 	}
+	sort.Strings(sortedPaths)
+
+	// Binary-search for a child: O(N log N) over the full directory set.
+	largest := make([]entry, 0, len(allDirs))
+	for _, e := range allDirs {
+		prefix := e.path
+		if prefix != "/" {
+			prefix += "/"
+		}
+		pos := sort.SearchStrings(sortedPaths, prefix)
+		if pos >= len(sortedPaths) || !strings.HasPrefix(sortedPaths[pos], prefix) {
+			largest = append(largest, e)
+		}
+	}
+
 	sort.Slice(largest, func(i, j int) bool { return largest[i].size > largest[j].size })
 	if len(largest) > 8 {
 		largest = largest[:8]
