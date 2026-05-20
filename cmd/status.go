@@ -3,8 +3,10 @@ package cmd
 import (
 	"fmt"
 	"sort"
-	"golang.org/x/sys/unix"
+	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/spf13/cobra"
 
@@ -39,6 +41,44 @@ func diskUsage(path string) (total, used, avail uint64, err error) {
 	avail = stat.Bavail * bsize
 	used = (stat.Blocks - stat.Bfree) * bsize
 	return
+}
+
+type chgEntry struct {
+	path  string
+	delta int64
+}
+
+// leafFilter removes entries whose change is fully accounted for by the sum of
+// their descendants in the set. A parent is kept when descendants explain less
+// than its total delta (meaning growth/shrink at this level is not attributable
+// to any tracked child alone).
+func leafFilter(entries []chgEntry) []chgEntry {
+	deltas := make(map[string]int64, len(entries))
+	for _, e := range entries {
+		deltas[e.path] = e.delta
+	}
+	out := make([]chgEntry, 0, len(entries))
+	for _, e := range entries {
+		prefix := e.path
+		if prefix != "/" {
+			prefix += "/"
+		}
+		var childSum int64
+		for other, d := range deltas {
+			if other != e.path && strings.HasPrefix(other, prefix) {
+				childSum += d
+			}
+		}
+		// Drop only when descendants fully account for the change.
+		if e.delta > 0 && childSum >= e.delta {
+			continue
+		}
+		if e.delta < 0 && childSum <= e.delta {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // runStatus prints a concise status report for the latest snapshot and growth since a baseline.
@@ -142,10 +182,6 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		sectionLabel = fmt.Sprintf("  Growth since last scan %s:", ui.Dim("("+formatDuration(span.Hours()/24)+")"))
 	}
 
-	type chgEntry struct {
-		path  string
-		delta int64
-	}
 	var movers []chgEntry
 	for path, after := range latest.Dirs {
 		if isSkipped(path) {
@@ -153,10 +189,11 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		}
 		before := prev.Dirs[path]
 		delta := after - before
-		if delta > 1<<20 { // only show dirs that grew >1MB
+		if delta > 1<<20 {
 			movers = append(movers, chgEntry{path, delta})
 		}
 	}
+	movers = leafFilter(movers)
 	sort.Slice(movers, func(i, j int) bool { return movers[i].delta > movers[j].delta })
 	if len(movers) > 8 {
 		movers = movers[:8]
