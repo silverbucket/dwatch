@@ -25,7 +25,7 @@ make uninstall   # remove the binary
 
 ### Install from a release
 
-Pre-built binaries are on the [GitHub releases](https://github.com/silverbucket/dwatch/releases) page (`linux` arm64/amd64, `darwin` arm64 for Apple Silicon).
+Pre-built binaries are on the [GitHub releases](https://github.com/silverbucket/dwatch/releases) page (`linux` arm64/amd64, `darwin` arm64/amd64 for Apple Silicon and Intel Mac).
 
 ```sh
 # Example: Linux arm64
