@@ -1,26 +1,20 @@
 # Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
-# Enter major/minor/patch; must match VERSION in the Makefile on master (bump it first).
+# Reads VERSION from the Makefile on master, bumps per dropdown, commits bump, then publishes.
 # Requires a "release" environment (see README) when using deployment protection.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
-      major:
-        description: Major version (non-negative integer, e.g. 1)
+      bump:
+        description: "Bump from Makefile VERSION on master (e.g. 1.3.0 + patch → 1.3.1)"
         required: true
-        type: string
-        default: "1"
-      minor:
-        description: Minor version (non-negative integer, e.g. 3)
-        required: true
-        type: string
-        default: "3"
-      patch:
-        description: Patch version (non-negative integer, e.g. 0)
-        required: true
-        type: string
-        default: "0"
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -40,39 +34,44 @@ jobs:
           go-version: "1.21"
           cache: true
 
-      - name: Validate version
+      - name: Compute release version
         id: meta
         env:
-          MAJOR: ${{ inputs.major }}
-          MINOR: ${{ inputs.minor }}
-          PATCH: ${{ inputs.patch }}
+          BUMP: ${{ inputs.bump }}
         run: |
           set -euo pipefail
-          for part in MAJOR MINOR PATCH; do
-            val="${!part}"
-            if ! [[ "${val}" =~ ^[0-9]+$ ]]; then
-              echo "${part} must be a non-negative integer, got: ${val}"
-              exit 1
-            fi
-          done
-          VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          TAG="v${VERSION}"
-          MAKEFILE_VERSION=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
-          if [ -z "${MAKEFILE_VERSION}" ]; then
+          CURRENT=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+          if [ -z "${CURRENT}" ]; then
             echo "Could not read VERSION from Makefile"
             exit 1
           fi
-          if [ "${VERSION}" != "${MAKEFILE_VERSION}" ]; then
-            echo "Entered ${VERSION} does not match Makefile VERSION=${MAKEFILE_VERSION}"
-            echo "Bump VERSION in the Makefile on master, merge, then run this workflow again."
+          if ! [[ "${CURRENT}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Makefile VERSION must be X.Y.Z (got: ${CURRENT})"
             exit 1
           fi
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+          case "${BUMP}" in
+            patch) PATCH=$((PATCH + 1)) ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            *)
+              echo "Invalid bump: ${BUMP}"
+              exit 1
+              ;;
+          esac
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          TAG="v${VERSION}"
+          echo "Current Makefile VERSION: ${CURRENT}"
+          echo "Bump: ${BUMP} → releasing ${VERSION}"
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists on remote"
             exit 1
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "previous=${CURRENT}" >> "$GITHUB_OUTPUT"
 
       - name: Check release does not exist
         env:
@@ -84,6 +83,23 @@ jobs:
             echo "Release ${TAG} already exists"
             exit 1
           fi
+
+      - name: Bump Makefile on master
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          sed -i "s/^VERSION ?=.*/VERSION ?= ${VERSION}/" Makefile
+          if ! grep -q "^VERSION ?= ${VERSION}$" Makefile; then
+            echo "Failed to update Makefile VERSION"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Makefile
+          git commit -m "chore: bump VERSION to ${VERSION}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
 
       - name: Run tests
         run: |
