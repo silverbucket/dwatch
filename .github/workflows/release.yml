@@ -154,13 +154,13 @@ jobs:
           TAG: ${{ steps.meta.outputs.tag }}
         run: |
           set -euo pipefail
+          git fetch origin master
           REMOTE_VERSION=$(git show origin/master:Makefile | sed -n 's/^VERSION ?=[[:space:]]*//p' | head -1)
           if [ "${REMOTE_VERSION}" = "${VERSION}" ]; then
             echo "master Makefile already at ${VERSION}"
             exit 0
           fi
           BRANCH="chore/bump-version-${VERSION}"
-          git fetch origin master
           git checkout -b "${BRANCH}" origin/master
           sed -i "s/^VERSION ?=.*/VERSION ?= ${VERSION}/" Makefile
           git add Makefile
