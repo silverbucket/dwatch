@@ -43,7 +43,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty')
+          LATEST_TAG=$(gh release list --limit 20 --exclude-drafts --exclude-pre-releases \
+            --json tagName --jq '[.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))][0] // empty')
           if [ -n "${LATEST_TAG}" ]; then
             CURRENT="${LATEST_TAG#v}"
             echo "Latest published release: ${LATEST_TAG}"
