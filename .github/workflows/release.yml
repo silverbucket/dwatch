@@ -1,14 +1,11 @@
-# Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
-# Bumps from the latest published release tag; works with protected master (no direct push).
-# See release.md.
-# Opens a PR to sync the Makefile after publishing.
+# See release.md
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       bump:
-        description: "Bump from latest release (e.g. v1.3.0 + patch → v1.3.1)"
+        description: Version bump
         required: true
         type: choice
         default: patch
@@ -74,14 +71,13 @@ jobs:
           esac
           VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${VERSION}"
-          echo "Bump: ${BUMP} → releasing ${VERSION}"
+          echo "Bump: ${BUMP} → ${VERSION} (was ${CURRENT})"
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists on remote"
             exit 1
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "previous=${CURRENT}" >> "$GITHUB_OUTPUT"
 
       - name: Check release does not exist
         env:
@@ -94,6 +90,19 @@ jobs:
             exit 1
           fi
 
+      - name: Update Makefile to release version (workspace only)
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          sed -i "s/^VERSION ?=.*/VERSION ?= ${VERSION}/" Makefile
+          MAKEFILE_VERSION=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+          if [ "${MAKEFILE_VERSION}" != "${VERSION}" ]; then
+            echo "Makefile VERSION is ${MAKEFILE_VERSION}, expected ${VERSION}"
+            exit 1
+          fi
+          echo "Makefile in this job is now VERSION=${VERSION} (not committed to master yet)"
+
       - name: Run tests
         run: |
           go test ./... -count=1
@@ -105,13 +114,18 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
+          MAKEFILE_VERSION=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+          if [ "${MAKEFILE_VERSION}" != "${VERSION}" ]; then
+            echo "Refusing to build: Makefile=${MAKEFILE_VERSION} release=${VERSION}"
+            exit 1
+          fi
           LDFLAGS="-s -w -X dwatch/cmd.Version=${VERSION}"
           mkdir -p dist
 
           build() {
             local goos=$1 goarch=$2
             local base="dwatch_${TAG}_${goos}_${goarch}"
-            echo "Building ${goos}/${goarch}..."
+            echo "Building ${goos}/${goarch} version ${VERSION}..."
             GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dwatch .
             tar -czf "dist/${base}.tar.gz" dwatch
             rm dwatch
@@ -140,15 +154,14 @@ jobs:
           TAG: ${{ steps.meta.outputs.tag }}
         run: |
           set -euo pipefail
-          CURRENT=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
-          if [ "${CURRENT}" = "${VERSION}" ]; then
-            echo "Makefile already at ${VERSION}; no PR needed"
+          REMOTE_VERSION=$(git show origin/master:Makefile | sed -n 's/^VERSION ?=[[:space:]]*//p' | head -1)
+          if [ "${REMOTE_VERSION}" = "${VERSION}" ]; then
+            echo "master Makefile already at ${VERSION}"
             exit 0
           fi
           BRANCH="chore/bump-version-${VERSION}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "${BRANCH}"
+          git fetch origin master
+          git checkout -b "${BRANCH}" origin/master
           sed -i "s/^VERSION ?=.*/VERSION ?= ${VERSION}/" Makefile
           git add Makefile
           git commit -m "chore: bump VERSION to ${VERSION}"
@@ -157,5 +170,5 @@ jobs:
             --base master \
             --head "${BRANCH}" \
             --title "chore: bump VERSION to ${VERSION}" \
-            --body "Automated after ${TAG}. Merge to keep the Makefile in sync with the latest release."
-          gh pr merge --auto --squash || echo "Enable auto-merge on the PR or merge manually"
+            --body "Automated after ${TAG}. Merge so master Makefile matches the release."
+          gh pr merge --auto --squash || echo "Merge manually after CI passes"
