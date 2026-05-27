@@ -1,4 +1,4 @@
-VERSION ?= 1.3.2
+VERSION ?= 1.3.4
 DESTDIR ?= /usr/local/bin
 LDFLAGS  = -ldflags "-X dwatch/cmd.Version=$(VERSION)"
 
