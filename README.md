@@ -200,9 +200,10 @@ Ensure **Settings** → **Actions** → **General** → **Workflow permissions**
 
 ### Cut a release
 
-1. Ensure `VERSION` in the **Makefile** on `master` matches the **last published** release (e.g. `1.3.0` after v1.3.0 is out)
-2. **Actions** → **Release** → **Run workflow** — choose **patch** (default), **minor**, or **major**; CI bumps the Makefile (e.g. `1.3.0` + patch → `1.3.1`), commits to `master`, then builds and publishes
+1. **Actions** → **Release** → **Run workflow** — choose **patch** (default), **minor**, or **major**
+2. CI reads the **latest published release** (e.g. `v1.3.0`), computes the next version (`1.3.1` for patch), runs tests, and publishes binaries
 3. Approve the **release** environment deployment if reviewers are configured
+4. Merge the automated **Makefile bump PR** when it appears (required for protected `master`; keeps `make build` in sync)
 
 The workflow refuses to publish if that tag or GitHub Release already exists.
 
