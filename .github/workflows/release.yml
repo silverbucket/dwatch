@@ -1,13 +1,14 @@
 # Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
-# Reads VERSION from the Makefile on master, bumps per dropdown, commits bump, then publishes.
-# Requires a "release" environment (see README) when using deployment protection.
+# Bumps from the latest published release tag; works with protected master (no direct push).
+# See release.md.
+# Opens a PR to sync the Makefile after publishing.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       bump:
-        description: "Bump from Makefile VERSION on master (e.g. 1.3.0 + patch → 1.3.1)"
+        description: "Bump from latest release (e.g. v1.3.0 + patch → v1.3.1)"
         required: true
         type: choice
         default: patch
@@ -18,6 +19,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
@@ -38,15 +40,24 @@ jobs:
         id: meta
         env:
           BUMP: ${{ inputs.bump }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          CURRENT=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+          LATEST_TAG=$(gh release list --limit 20 --exclude-drafts --exclude-pre-releases \
+            --json tagName --jq '[.[].tagName | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))][0] // empty')
+          if [ -n "${LATEST_TAG}" ]; then
+            CURRENT="${LATEST_TAG#v}"
+            echo "Latest published release: ${LATEST_TAG}"
+          else
+            CURRENT=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+            echo "No releases yet; using Makefile VERSION=${CURRENT}"
+          fi
           if [ -z "${CURRENT}" ]; then
-            echo "Could not read VERSION from Makefile"
+            echo "Could not determine current version"
             exit 1
           fi
           if ! [[ "${CURRENT}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-            echo "Makefile VERSION must be X.Y.Z (got: ${CURRENT})"
+            echo "Current version must be X.Y.Z (got: ${CURRENT})"
             exit 1
           fi
           MAJOR="${BASH_REMATCH[1]}"
@@ -63,7 +74,6 @@ jobs:
           esac
           VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${VERSION}"
-          echo "Current Makefile VERSION: ${CURRENT}"
           echo "Bump: ${BUMP} → releasing ${VERSION}"
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists on remote"
@@ -83,23 +93,6 @@ jobs:
             echo "Release ${TAG} already exists"
             exit 1
           fi
-
-      - name: Bump Makefile on master
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          set -euo pipefail
-          sed -i "s/^VERSION ?=.*/VERSION ?= ${VERSION}/" Makefile
-          if ! grep -q "^VERSION ?= ${VERSION}$" Makefile; then
-            echo "Failed to update Makefile VERSION"
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Makefile
-          git commit -m "chore: bump VERSION to ${VERSION}"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:master
 
       - name: Run tests
         run: |
@@ -139,3 +132,30 @@ jobs:
           files: dist/*
           generate_release_notes: true
           overwrite_files: false
+
+      - name: Open Makefile sync pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          CURRENT=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+          if [ "${CURRENT}" = "${VERSION}" ]; then
+            echo "Makefile already at ${VERSION}; no PR needed"
+            exit 0
+          fi
+          BRANCH="chore/bump-version-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          sed -i "s/^VERSION ?=.*/VERSION ?= ${VERSION}/" Makefile
+          git add Makefile
+          git commit -m "chore: bump VERSION to ${VERSION}"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${BRANCH}"
+          gh pr create \
+            --base master \
+            --head "${BRANCH}" \
+            --title "chore: bump VERSION to ${VERSION}" \
+            --body "Automated after ${TAG}. Merge to keep the Makefile in sync with the latest release."
+          gh pr merge --auto --squash || echo "Enable auto-merge on the PR or merge manually"
