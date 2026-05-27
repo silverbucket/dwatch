@@ -1,39 +1,45 @@
 # Releasing dwatch
 
-Releases are cut from GitHub Actions on protected `master` — no local `git tag` or push required.
+Releases are cut from GitHub Actions. Branch protection on `master` stays enabled.
 
-Pre-built binaries for end users are listed on the [GitHub releases](https://github.com/silverbucket/dwatch/releases) page.
+Pre-built binaries: [GitHub releases](https://github.com/silverbucket/dwatch/releases).
 
 ## One-time setup: `release` environment
 
-In the repo on GitHub: **Settings** → **Environments** → **New environment** → name it `release`.
+**Settings** → **Environments** → **New environment** → `release`.
 
-Recommended for a protected `master` branch:
+Recommended:
 
-- **Required reviewers** — one or more people must approve before binaries are published
-- **Deployment branches** — limit to `master` only (releases are built from `master` HEAD)
+- **Required reviewers** before publish
+- **Deployment branches** → `master` only
 
-Ensure **Settings** → **Actions** → **General** → **Workflow permissions** is **Read and write**.
+**Settings** → **Actions** → **General** → workflow permissions **Read and write**.
 
 ## Cut a release
 
-1. **Actions** → **Release** → **Run workflow** — choose **patch** (default), **minor**, or **major**
-2. CI reads the **latest published release** (e.g. `v1.3.0`), computes the next version (`1.3.1` for patch), runs tests, and publishes binaries
-3. Approve the **release** environment deployment if reviewers are configured
-4. Merge the automated **Makefile bump PR** when it appears (required for protected `master`; keeps `make build` in sync)
+1. **Actions** → **Release** → **Run workflow** → **patch** (default), **minor**, or **major**
+2. Approve the **release** environment if reviewers are configured
+3. When the job finishes, merge the **Makefile bump PR** if one was opened (so `master` matches the release)
 
-The workflow refuses to publish if that tag or GitHub Release already exists.
+The workflow refuses to publish if that tag or release already exists.
 
 ## Version bumps
 
-| Bump | Example (`v1.3.0` latest) |
-|------|-----------------------------|
-| **patch** (default) | `v1.3.1` |
+| Bump | Example (latest `v1.3.0`) |
+|------|---------------------------|
+| **patch** | `v1.3.1` |
 | **minor** | `v1.4.0` |
 | **major** | `v2.0.0` |
 
-Current version is taken from the latest GitHub release tag. If there are no releases yet, the workflow falls back to `VERSION` in the Makefile.
+The starting point is the latest stable GitHub release tag (drafts and pre-releases excluded). If there are no releases yet, the Makefile `VERSION` on `master` is used.
 
-## Protected `master`
+## What the workflow does (order of operations)
 
-The release job does **not** push directly to `master`. After a successful publish, it opens a pull request to update `VERSION` in the Makefile. Merge that PR so local `make build` matches the release.
+1. **Compute** the new version from the latest release plus your bump choice.
+2. **Edit the Makefile in the CI workspace** to that version (this happens **before** build; it does not commit to `master` yet).
+3. **Run tests** on that tree.
+4. **Build** binaries. The job checks that the Makefile matches the release version, then compiles with `-ldflags` so `dwatch --version` is correct.
+5. **Publish** the GitHub Release and upload tarballs.
+6. **Open a pull request** to update `VERSION` on `master`, because branch protection requires a PR for commits on `master`.
+
+Step 6 does not change what is inside the tarballs from step 4. It only brings `master` in line for anyone cloning the repo and running `make build` locally.
