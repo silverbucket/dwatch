@@ -23,18 +23,6 @@ This builds the binary, installs it to `/usr/local/bin/dwatch`, and copies a def
 make uninstall   # remove the binary
 ```
 
-### Install from a release
-
-Pre-built binaries are attached to each [GitHub release](https://github.com/silverbucket/dwatch/releases) (`linux` arm64/amd64, `darwin` arm64 for Apple Silicon).
-
-```sh
-# Example: Linux arm64 — pick the archive matching your OS/arch
-curl -sL https://github.com/silverbucket/dwatch/releases/download/v1.3.0/dwatch_v1.3.0_linux_arm64.tar.gz | tar -xz
-sudo install -m 755 dwatch /usr/local/bin/dwatch
-```
-
-Verify with `dwatch --version` and `sha256sum -c SHA256SUMS` (checksums are on the release page).
-
 
 ## Quick start
 
@@ -184,6 +172,18 @@ scan_skip = /dev, /System/Volumes, /net, /home
 ```
 
 `scan_skip` is applied at report time, not just at scan time. Adding a path to the skip list removes it from `diff`, `top`, `status`, and `alert` output immediately — even for old snapshots — without needing to re-scan.
+
+## Releasing
+
+Tag a version and push; CI builds binaries and publishes a GitHub release:
+
+```sh
+git tag v1.3.0
+git push origin v1.3.0
+```
+
+The release workflow runs tests, cross-compiles for `linux/arm64`, `linux/amd64`, and `darwin/arm64`, uploads `.tar.gz` archives plus `SHA256SUMS`, and generates release notes.
+
 
 ## License & credits
 
