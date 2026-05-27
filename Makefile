@@ -1,4 +1,4 @@
-VERSION ?= 1.2.0
+VERSION ?= 1.3.0
 DESTDIR ?= /usr/local/bin
 LDFLAGS  = -ldflags "-X dwatch/cmd.Version=$(VERSION)"
 
@@ -26,4 +26,7 @@ clean:
 release: clean build
 	@echo "Built dwatch $(VERSION)"
 
-.PHONY: build install uninstall clean release
+.PHONY: build install uninstall clean release print-version
+
+print-version:
+	@echo $(VERSION)

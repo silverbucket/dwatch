@@ -1,14 +1,26 @@
 # Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
+# Enter major/minor/patch; must match VERSION in the Makefile on master (bump it first).
 # Requires a "release" environment (see README) when using deployment protection.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Semver version (e.g. 1.3.0 or v1.3.0)"
+      major:
+        description: Major version (non-negative integer, e.g. 1)
         required: true
         type: string
+        default: "1"
+      minor:
+        description: Minor version (non-negative integer, e.g. 3)
+        required: true
+        type: string
+        default: "3"
+      patch:
+        description: Patch version (non-negative integer, e.g. 0)
+        required: true
+        type: string
+        default: "0"
 
 permissions:
   contents: write
@@ -31,27 +43,47 @@ jobs:
       - name: Validate version
         id: meta
         env:
-          INPUT_VERSION: ${{ inputs.version }}
-          GH_TOKEN: ${{ github.token }}
+          MAJOR: ${{ inputs.major }}
+          MINOR: ${{ inputs.minor }}
+          PATCH: ${{ inputs.patch }}
         run: |
           set -euo pipefail
-          RAW="$INPUT_VERSION"
-          VERSION="${RAW#v}"
+          for part in MAJOR MINOR PATCH; do
+            val="${!part}"
+            if ! [[ "${val}" =~ ^[0-9]+$ ]]; then
+              echo "${part} must be a non-negative integer, got: ${val}"
+              exit 1
+            fi
+          done
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${VERSION}"
-          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "Version must be semver (e.g. 1.3.0)"
+          MAKEFILE_VERSION=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+          if [ -z "${MAKEFILE_VERSION}" ]; then
+            echo "Could not read VERSION from Makefile"
+            exit 1
+          fi
+          if [ "${VERSION}" != "${MAKEFILE_VERSION}" ]; then
+            echo "Entered ${VERSION} does not match Makefile VERSION=${MAKEFILE_VERSION}"
+            echo "Bump VERSION in the Makefile on master, merge, then run this workflow again."
             exit 1
           fi
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "Tag ${TAG} already exists on remote"
             exit 1
           fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Check release does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists"
             exit 1
           fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
         run: |
