@@ -201,7 +201,7 @@ Ensure **Settings** → **Actions** → **General** → **Workflow permissions**
 ### Cut a release
 
 1. Bump `VERSION` in the **Makefile** on `master` (e.g. `1.3.1`) and merge
-2. **Actions** → **Release** → **Run workflow** — select **major**, **minor**, and **patch** to match the Makefile (the job fails if they differ)
+2. **Actions** → **Release** → **Run workflow** — enter **major**, **minor**, and **patch** (integers) to match the Makefile (the job fails if they differ)
 3. Approve the **release** environment deployment if reviewers are configured
 4. CI checks out `master`, runs tests, builds archives, creates `v1.3.1`, and uploads assets to GitHub Releases
 
