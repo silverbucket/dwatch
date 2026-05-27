@@ -16,6 +16,7 @@ func TestParseBytes(t *testing.T) {
 		{"1GB", 1 << 30},
 		{"100kb", 100 << 10},
 		{"2.5mb", int64(2.5 * float64(1<<20))},
+		{"1", 1},
 	}
 	for _, tc := range tests {
 		got, err := parseBytes(tc.in)
@@ -41,6 +42,17 @@ func TestParseBytesMixedCase(t *testing.T) {
 func TestParseBytesInvalid(t *testing.T) {
 	if _, err := parseBytes("x"); err == nil {
 		t.Fatal("expected error for invalid size")
+	}
+	if _, err := parseBytes(""); err == nil {
+		t.Fatal("expected error for empty size")
+	}
+}
+
+func TestParseBytesNegative(t *testing.T) {
+	for _, in := range []string{"-1", "-1mb", "-500kb"} {
+		if _, err := parseBytes(in); err == nil {
+			t.Fatalf("expected error for negative size %q", in)
+		}
 	}
 }
 

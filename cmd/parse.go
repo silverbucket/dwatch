@@ -62,7 +62,10 @@ func tryParseSinceDate(s string) (time.Time, error) {
 
 func parseBytes(s string) (int64, error) {
 	s = strings.TrimSpace(s)
-	if len(s) < 2 {
+	if len(s) == 0 {
+		return 0, fmt.Errorf("invalid size %q — use 100mb, 1gb, 500kb", s)
+	}
+	if strings.HasPrefix(s, "-") {
 		return 0, fmt.Errorf("invalid size %q — use 100mb, 1gb, 500kb", s)
 	}
 
@@ -87,14 +90,14 @@ func parseBytes(s string) (int64, error) {
 		}
 		numStr := lower[:len(lower)-len(su.suffix)]
 		n, err := strconv.ParseFloat(numStr, 64)
-		if err != nil {
+		if err != nil || n < 0 {
 			return 0, fmt.Errorf("invalid size %q", s)
 		}
 		return int64(n * float64(su.mult)), nil
 	}
 
 	n, err := strconv.ParseInt(lower, 10, 64)
-	if err != nil {
+	if err != nil || n < 0 {
 		return 0, fmt.Errorf("invalid size %q — use 100mb, 1gb, 500kb", s)
 	}
 	return n, nil
