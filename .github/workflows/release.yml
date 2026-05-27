@@ -1,0 +1,93 @@
+# Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
+# Requires a "release" environment (see README) when using deployment protection.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver version (e.g. 1.3.0 or v1.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.0
+        with:
+          ref: master
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.21"
+          cache: true
+
+      - name: Validate version
+        id: meta
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RAW="$INPUT_VERSION"
+          VERSION="${RAW#v}"
+          TAG="v${VERSION}"
+          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "Version must be semver (e.g. 1.3.0)"
+            exit 1
+          fi
+          if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists on remote"
+            exit 1
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        run: |
+          go test ./... -count=1
+          go vet ./...
+
+      - name: Build release archives
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          LDFLAGS="-s -w -X dwatch/cmd.Version=${VERSION}"
+          mkdir -p dist
+
+          build() {
+            local goos=$1 goarch=$2
+            local base="dwatch_${TAG}_${goos}_${goarch}"
+            echo "Building ${goos}/${goarch}..."
+            GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dwatch .
+            tar -czf "dist/${base}.tar.gz" dwatch
+            rm dwatch
+            sha256sum "dist/${base}.tar.gz" | tee -a dist/SHA256SUMS
+          }
+
+          build linux arm64
+          build linux amd64
+          build darwin arm64
+          build darwin amd64
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.4.2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          target_commitish: master
+          files: dist/*
+          generate_release_notes: true
+          overwrite_files: false

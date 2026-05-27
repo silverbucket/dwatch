@@ -23,6 +23,16 @@ This builds the binary, installs it to `/usr/local/bin/dwatch`, and copies a def
 make uninstall   # remove the binary
 ```
 
+### Install from a release
+
+Pre-built binaries are on the [GitHub releases](https://github.com/silverbucket/dwatch/releases) page (`linux` arm64/amd64, `darwin` arm64/amd64 for Apple Silicon and Intel Mac).
+
+```sh
+# Example: Linux arm64
+curl -sL https://github.com/silverbucket/dwatch/releases/download/v1.3.0/dwatch_v1.3.0_linux_arm64.tar.gz | tar -xz
+sudo install -m 755 dwatch /usr/local/bin/dwatch
+```
+
 
 ## Quick start
 
@@ -125,7 +135,7 @@ Rank directories by growth within a time window.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-s, --since` | — | Time window (`30min`, `1h`, `2d`, `3w`, `1m`/`1mo`, or `YYYY-MM-DD`); omit to compare against the previous snapshot |
+| `-s, --since` | — | Time window; omit to compare against the previous snapshot |
 | `--by` | `growth` | Sort: `growth` (bytes), `pct` (percentage), `rate` (bytes/day) |
 | `-l, --limit` | `20` | Number of results (`0` = all) |
 
@@ -172,6 +182,29 @@ scan_skip = /dev, /System/Volumes, /net, /home
 ```
 
 `scan_skip` is applied at report time, not just at scan time. Adding a path to the skip list removes it from `diff`, `top`, `status`, and `alert` output immediately — even for old snapshots — without needing to re-scan.
+
+## Releasing
+
+Releases are cut from CI on protected `master` — no local `git tag` or push required.
+
+### One-time setup: `release` environment
+
+In the repo on GitHub: **Settings** → **Environments** → **New environment** → name it `release`.
+
+Recommended for a protected `master` branch:
+
+- **Required reviewers** — one or more people must approve before binaries are published
+- **Deployment branches** — limit to `master` only (tags/releases are built from `master` HEAD)
+
+Ensure **Settings** → **Actions** → **General** → **Workflow permissions** is **Read and write**.
+
+### Cut a release
+
+1. **Actions** → **Release** → **Run workflow** (workflow file must be on `master`)
+2. Enter a **new** version (e.g. `1.3.0`) — the workflow refuses tags/releases that already exist
+3. Approve the **release** environment deployment if reviewers are configured
+4. CI checks out `master`, runs tests, builds archives, creates `v1.3.0`, and uploads assets to GitHub Releases
+
 
 ## License & credits
 
