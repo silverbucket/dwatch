@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"dwatch/internal/store"
+	"dwatch/internal/report"
 	"dwatch/internal/ui"
 )
 
@@ -30,38 +30,18 @@ var (
 
 func init() {
 	rootCmd.AddCommand(diffCmd)
-	diffCmd.Flags().StringVarP(&diffSince, "since", "s", "", "compare to snapshot from this time ago (1h, 2d, 3w, 1m, YYYY-MM-DD)")
+	diffCmd.Flags().StringVarP(&diffSince, "since", "s", "", "compare to snapshot from this time ago (30min, 1h, 2d, 3w, 1m, YYYY-MM-DD)")
 	diffCmd.Flags().StringVar(&diffMinChange, "min-change", "1mb", "minimum change to show")
 	diffCmd.Flags().IntVarP(&diffLimit, "limit", "l", 30, "max rows to show (0 = all)")
 	diffCmd.Flags().BoolVarP(&diffAll, "all", "a", false, "show all dirs including unchanged")
 }
 
 func runDiff(_ *cobra.Command, _ []string) error {
-	latest, err := store.Latest(dataDir)
-	if err != nil || latest == nil {
-		return fmt.Errorf("no snapshots found — run 'dwatch scan' first")
+	pair, err := resolveComparePair(diffSince)
+	if err != nil {
+		return err
 	}
-
-	var old *store.Snapshot
-	if diffSince != "" {
-		cutoff, err := parseSince(diffSince)
-		if err != nil {
-			return err
-		}
-		old, err = store.LatestBefore(dataDir, cutoff)
-		if err != nil {
-			return err
-		}
-	} else {
-		old, err = store.Previous(dataDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	if old == nil {
-		return fmt.Errorf("no earlier snapshot found — take more scans first")
-	}
+	latest, old := pair.latest, pair.baseline
 
 	minChange, err := parseBytes(diffMinChange)
 	if err != nil {
@@ -74,7 +54,40 @@ func runDiff(_ *cobra.Command, _ []string) error {
 	fmt.Printf("\n  %s\n", ui.Header("Disk Change Report"))
 	fmt.Printf("  From:  %s\n", ui.Dim(old.TakenAt.Format("2006-01-02 15:04:05")))
 	fmt.Printf("  To:    %s\n", ui.Dim(latest.TakenAt.Format("2006-01-02 15:04:05")))
-	fmt.Printf("  Span:  %s\n\n", ui.Bold(formatDuration(days)))
+	fmt.Printf("  Span:  %s\n", ui.Bold(formatDuration(days)))
+	if pair.note != "" {
+		fmt.Printf("  %s\n", ui.Dim("(baseline: "+pair.note+")"))
+	}
+	fmt.Println()
+
+	var changes []report.Change
+	seen := make(map[string]bool)
+
+	for path, after := range latest.Dirs {
+		seen[path] = true
+		if pathSkipped(path, latest, old) {
+			continue
+		}
+		before := old.Dirs[path]
+		delta := after - before
+		if !diffAll && int64(math.Abs(float64(delta))) < minChange {
+			continue
+		}
+		changes = append(changes, report.Change{Path: path, Delta: delta})
+	}
+
+	for path, before := range old.Dirs {
+		if seen[path] || pathSkipped(path, latest, old) {
+			continue
+		}
+		delta := -before
+		if !diffAll && int64(math.Abs(float64(delta))) < minChange {
+			continue
+		}
+		changes = append(changes, report.Change{Path: path, Delta: delta})
+	}
+
+	changes = report.LeafFilter(changes)
 
 	type row struct {
 		path   string
@@ -83,37 +96,17 @@ func runDiff(_ *cobra.Command, _ []string) error {
 		delta  int64
 		pct    float64
 	}
-
 	var rows []row
-	seen := make(map[string]bool)
-
-	for path, after := range latest.Dirs {
-		seen[path] = true
-		if isSkipped(path) {
-			continue
-		}
-		before := old.Dirs[path]
-		delta := after - before
-		if !diffAll && int64(math.Abs(float64(delta))) < minChange {
-			continue
-		}
+	for _, c := range changes {
+		before := old.Dirs[c.Path]
+		after := latest.Dirs[c.Path]
 		pct := 0.0
 		if before > 0 {
-			pct = float64(delta) / float64(before) * 100
+			pct = float64(c.Delta) / float64(before) * 100
+		} else if after == 0 && before > 0 {
+			pct = -100
 		}
-		rows = append(rows, row{path, before, after, delta, pct})
-	}
-
-	// dirs in old but not latest (deleted or now skipped)
-	for path, before := range old.Dirs {
-		if seen[path] || isSkipped(path) {
-			continue
-		}
-		delta := -before
-		if !diffAll && int64(math.Abs(float64(delta))) < minChange {
-			continue
-		}
-		rows = append(rows, row{path, before, 0, delta, -100})
+		rows = append(rows, row{c.Path, before, after, c.Delta, pct})
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
@@ -153,21 +146,4 @@ func runDiff(_ *cobra.Command, _ []string) error {
 	)
 	fmt.Println()
 	return nil
-}
-
-func formatDuration(days float64) string {
-	switch {
-	case days < 0.1:
-		mins := days * 24 * 60
-		return fmt.Sprintf("%.0f minutes", mins)
-	case days < 1:
-		hours := days * 24
-		return fmt.Sprintf("%.1f hours", hours)
-	case days < 7:
-		return fmt.Sprintf("%.1f days", days)
-	case days < 31:
-		return fmt.Sprintf("%.1f weeks", days/7)
-	default:
-		return fmt.Sprintf("%.1f months", days/30)
-	}
 }

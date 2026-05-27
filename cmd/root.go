@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,10 @@ Quick start:
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		var code exitCode
+		if errors.As(err, &code) {
+			os.Exit(int(code))
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -51,7 +56,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "d", cfg.DataDir, "directory to store snapshots")
 }
 
-// isSkipped reports whether path is covered by the configured skip list.
+// isSkipped reports whether path is covered by the config skip list alone.
 func isSkipped(path string) bool {
 	for _, skip := range cfg.ScanSkip {
 		if path == skip || strings.HasPrefix(path, skip+"/") {
