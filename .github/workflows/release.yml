@@ -1,4 +1,5 @@
 # Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
+# Requires a "release" environment (see README) when using deployment protection.
 name: Release
 
 on:
@@ -15,9 +16,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.0
         with:
+          ref: master
           persist-credentials: false
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
@@ -76,6 +79,6 @@ jobs:
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: ${{ steps.meta.outputs.tag }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: master
           files: dist/*
           generate_release_notes: true

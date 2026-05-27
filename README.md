@@ -23,6 +23,16 @@ This builds the binary, installs it to `/usr/local/bin/dwatch`, and copies a def
 make uninstall   # remove the binary
 ```
 
+### Install from a release
+
+Pre-built binaries are on the [GitHub releases](https://github.com/silverbucket/dwatch/releases) page (`linux` arm64/amd64, `darwin` arm64 for Apple Silicon).
+
+```sh
+# Example: Linux arm64
+curl -sL https://github.com/silverbucket/dwatch/releases/download/v1.3.0/dwatch_v1.3.0_linux_arm64.tar.gz | tar -xz
+sudo install -m 755 dwatch /usr/local/bin/dwatch
+```
+
 
 ## Quick start
 
@@ -175,14 +185,25 @@ scan_skip = /dev, /System/Volumes, /net, /home
 
 ## Releasing
 
-Tag a version and push; CI builds binaries and publishes a GitHub release:
+Releases are cut from CI on protected `master` — no local `git tag` or push required.
 
-```sh
-git tag v1.3.0
-git push origin v1.3.0
-```
+### One-time setup: `release` environment
 
-The release workflow runs tests, cross-compiles for `linux/arm64`, `linux/amd64`, and `darwin/arm64`, uploads `.tar.gz` archives plus `SHA256SUMS`, and generates release notes.
+In the repo on GitHub: **Settings** → **Environments** → **New environment** → name it `release`.
+
+Recommended for a protected `master` branch:
+
+- **Required reviewers** — one or more people must approve before binaries are published
+- **Deployment branches** — limit to `master` only (tags/releases are built from `master` HEAD)
+
+Ensure **Settings** → **Actions** → **General** → **Workflow permissions** is **Read and write**.
+
+### Cut a release
+
+1. **Actions** → **Release** → **Run workflow** (workflow file must be on `master`)
+2. Enter the version (e.g. `1.3.0`)
+3. Approve the **release** environment deployment if reviewers are configured
+4. CI checks out `master`, runs tests, builds archives, creates `v1.3.0`, and uploads assets to GitHub Releases
 
 
 ## License & credits
