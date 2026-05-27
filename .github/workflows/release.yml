@@ -1,10 +1,104 @@
 # Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
-# Version is read from VERSION in the Makefile on master — bump it before running.
+# Select major/minor/patch; must match VERSION in the Makefile on master (bump it first).
 # Requires a "release" environment (see README) when using deployment protection.
 name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      major:
+        description: Major version
+        required: true
+        type: choice
+        default: "1"
+        options:
+          - "0"
+          - "1"
+          - "2"
+          - "3"
+      minor:
+        description: Minor version
+        required: true
+        type: choice
+        default: "3"
+        options:
+          - "0"
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
+          - "7"
+          - "8"
+          - "9"
+          - "10"
+          - "11"
+          - "12"
+          - "13"
+          - "14"
+          - "15"
+          - "16"
+          - "17"
+          - "18"
+          - "19"
+          - "20"
+      patch:
+        description: Patch version
+        required: true
+        type: choice
+        default: "0"
+        options:
+          - "0"
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
+          - "7"
+          - "8"
+          - "9"
+          - "10"
+          - "11"
+          - "12"
+          - "13"
+          - "14"
+          - "15"
+          - "16"
+          - "17"
+          - "18"
+          - "19"
+          - "20"
+          - "21"
+          - "22"
+          - "23"
+          - "24"
+          - "25"
+          - "26"
+          - "27"
+          - "28"
+          - "29"
+          - "30"
+          - "31"
+          - "32"
+          - "33"
+          - "34"
+          - "35"
+          - "36"
+          - "37"
+          - "38"
+          - "39"
+          - "40"
+          - "41"
+          - "42"
+          - "43"
+          - "44"
+          - "45"
+          - "46"
+          - "47"
+          - "48"
+          - "49"
 
 permissions:
   contents: write
@@ -27,13 +121,18 @@ jobs:
       - name: Validate version
         id: meta
         env:
+          MAJOR: ${{ inputs.major }}
+          MINOR: ${{ inputs.minor }}
+          PATCH: ${{ inputs.patch }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          VERSION=$(make -s print-version)
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${VERSION}"
-          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "Makefile VERSION must be semver (e.g. 1.3.0), got: ${VERSION}"
+          MAKEFILE_VERSION=$(make -s print-version)
+          if [ "${VERSION}" != "${MAKEFILE_VERSION}" ]; then
+            echo "Selected ${VERSION} does not match Makefile VERSION=${MAKEFILE_VERSION}"
+            echo "Bump VERSION in the Makefile on master, merge, then run this workflow again."
             exit 1
           fi
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
