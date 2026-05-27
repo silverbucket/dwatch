@@ -124,12 +124,15 @@ jobs:
           MAJOR: ${{ inputs.major }}
           MINOR: ${{ inputs.minor }}
           PATCH: ${{ inputs.patch }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VERSION="${MAJOR}.${MINOR}.${PATCH}"
           TAG="v${VERSION}"
-          MAKEFILE_VERSION=$(make -s print-version)
+          MAKEFILE_VERSION=$(sed -n 's/^VERSION ?=[[:space:]]*//p' Makefile | head -1)
+          if [ -z "${MAKEFILE_VERSION}" ]; then
+            echo "Could not read VERSION from Makefile"
+            exit 1
+          fi
           if [ "${VERSION}" != "${MAKEFILE_VERSION}" ]; then
             echo "Selected ${VERSION} does not match Makefile VERSION=${MAKEFILE_VERSION}"
             echo "Bump VERSION in the Makefile on master, merge, then run this workflow again."
@@ -139,12 +142,19 @@ jobs:
             echo "Tag ${TAG} already exists on remote"
             exit 1
           fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Check release does not exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists"
             exit 1
           fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Run tests
         run: |
