@@ -201,7 +201,7 @@ Ensure **Settings** → **Actions** → **General** → **Workflow permissions**
 ### Cut a release
 
 1. **Actions** → **Release** → **Run workflow** (workflow file must be on `master`)
-2. Enter the version (e.g. `1.3.0`)
+2. Enter a **new** version (e.g. `1.3.0`) — the workflow refuses tags/releases that already exist
 3. Approve the **release** environment deployment if reviewers are configured
 4. CI checks out `master`, runs tests, builds archives, creates `v1.3.0`, and uploads assets to GitHub Releases
 
