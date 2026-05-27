@@ -56,6 +56,7 @@ func runScan(_ *cobra.Command, _ []string) error {
 		TakenAt: time.Now(),
 		Root:    scanRoot,
 		Depth:   scanDepth,
+		Skip:    append([]string(nil), scanSkip...),
 		Dirs:    result.Dirs,
 	}
 

@@ -1,14 +1,15 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"dwatch/internal/config"
+	"dwatch/internal/report"
 )
 
 // Version is set at build time via -ldflags "-X dwatch/cmd.Version=x.y.z".
@@ -35,6 +36,10 @@ Quick start:
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		var code exitCode
+		if errors.As(err, &code) {
+			os.Exit(int(code))
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -51,12 +56,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "d", cfg.DataDir, "directory to store snapshots")
 }
 
-// isSkipped reports whether path is covered by the configured skip list.
+// isSkipped reports whether path is covered by the config skip list alone.
 func isSkipped(path string) bool {
-	for _, skip := range cfg.ScanSkip {
-		if path == skip || strings.HasPrefix(path, skip+"/") {
-			return true
-		}
-	}
-	return false
+	return report.PathSkipped(path, cfg.ScanSkip)
 }

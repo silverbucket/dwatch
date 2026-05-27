@@ -3,12 +3,11 @@ package cmd
 import (
 	"fmt"
 	"math"
-	"os"
 	"sort"
 
 	"github.com/spf13/cobra"
 
-	"dwatch/internal/store"
+	"dwatch/internal/report"
 	"dwatch/internal/ui"
 )
 
@@ -32,9 +31,8 @@ var (
 
 func init() {
 	rootCmd.AddCommand(alertCmd)
-	alertCmd.Flags().StringVarP(&alertSince, "since", "s", "", "comparison window (1h, 2d, 3w, 1m, YYYY-MM-DD); default: previous scan")
+	alertCmd.Flags().StringVarP(&alertSince, "since", "s", "", "comparison window (30min, 1h, 2d, 3w, 1m, YYYY-MM-DD); default: previous scan")
 	alertCmd.Flags().StringVarP(&alertThreshold, "threshold", "t", "500mb", "growth threshold to alert on (e.g. 100mb, 1gb)")
-	_ = alertCmd.MarkFlagRequired("threshold")
 }
 
 func runAlert(_ *cobra.Command, _ []string) error {
@@ -43,31 +41,11 @@ func runAlert(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	latest, err := store.Latest(dataDir)
-	if err != nil || latest == nil {
-		return fmt.Errorf("no snapshots found — run 'dwatch scan' first")
+	pair, err := resolveComparePair(alertSince)
+	if err != nil {
+		return err
 	}
-
-	var old *store.Snapshot
-	if alertSince != "" {
-		cutoff, err := parseSince(alertSince)
-		if err != nil {
-			return err
-		}
-		old, err = store.LatestBefore(dataDir, cutoff)
-		if err != nil {
-			return err
-		}
-	} else {
-		old, err = store.Previous(dataDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	if old == nil {
-		return fmt.Errorf("no earlier snapshot found — take more scans first")
-	}
+	latest, old := pair.latest, pair.baseline
 
 	type hit struct {
 		path  string
@@ -75,20 +53,27 @@ func runAlert(_ *cobra.Command, _ []string) error {
 		pct   float64
 	}
 
-	var hits []hit
+	var changes []report.Change
 	for path, after := range latest.Dirs {
-		if isSkipped(path) {
+		if pathSkipped(path, latest, old) {
 			continue
 		}
 		before := old.Dirs[path]
 		delta := after - before
 		if delta >= threshold {
-			pct := 0.0
-			if before > 0 {
-				pct = float64(delta) / float64(before) * 100
-			}
-			hits = append(hits, hit{path, delta, pct})
+			changes = append(changes, report.Change{Path: path, Delta: delta})
 		}
+	}
+	changes = report.LeafFilter(changes)
+
+	var hits []hit
+	for _, c := range changes {
+		before := old.Dirs[c.Path]
+		pct := 0.0
+		if before > 0 {
+			pct = float64(c.Delta) / float64(before) * 100
+		}
+		hits = append(hits, hit{c.Path, c.Delta, pct})
 	}
 
 	sort.Slice(hits, func(i, j int) bool {
@@ -96,7 +81,7 @@ func runAlert(_ *cobra.Command, _ []string) error {
 	})
 
 	if len(hits) == 0 {
-		return nil // exit 0, no alert
+		return nil
 	}
 
 	duration := latest.TakenAt.Sub(old.TakenAt)
@@ -124,6 +109,5 @@ func runAlert(_ *cobra.Command, _ []string) error {
 	)
 	fmt.Println()
 
-	os.Exit(1)
-	return nil
+	return exitCode(1)
 }

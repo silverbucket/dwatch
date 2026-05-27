@@ -107,7 +107,7 @@ Full change table between two snapshots.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-s, --since` | — | Baseline time (`30min`, `1h`, `2d`, `3w`, `1m`/`1mo` for months, or `YYYY-MM-DD`); omit to compare against the previous snapshot |
+| `-s, --since` | — | Baseline time; omit to compare against the previous snapshot |
 | `--min-change` | `1mb` | Minimum change to include |
 | `-l, --limit` | `30` | Max rows (`0` = all) |
 | `-a, --all` | `false` | Include unchanged directories |
@@ -125,7 +125,7 @@ Rank directories by growth within a time window.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-s, --since` | — | Time window; omit to compare against the previous snapshot |
+| `-s, --since` | — | Time window (`30min`, `1h`, `2d`, `3w`, `1m`/`1mo`, or `YYYY-MM-DD`); omit to compare against the previous snapshot |
 | `--by` | `growth` | Sort: `growth` (bytes), `pct` (percentage), `rate` (bytes/day) |
 | `-l, --limit` | `20` | Number of results (`0` = all) |
 

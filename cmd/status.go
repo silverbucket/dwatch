@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"dwatch/internal/report"
 	"dwatch/internal/store"
 	"dwatch/internal/ui"
 )
@@ -25,13 +26,10 @@ var statusLimit int
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
-	statusCmd.Flags().StringVar(&statusSince, "since", "", "compare growth over this window (e.g. 1h, 2d, 1w, 1m)")
+	statusCmd.Flags().StringVar(&statusSince, "since", "", "compare growth over this window (e.g. 30min, 1h, 2d, 1w, 1m)")
 	statusCmd.Flags().IntVarP(&statusLimit, "limit", "l", 5, "max entries per section")
 }
 
-// diskUsage reports the total, used, and available bytes for the filesystem containing path.
-// It returns the total size, used size, and available size (in bytes). If retrieving filesystem
-// statistics fails, the returned error describes the failure.
 func diskUsage(path string) (total, used, avail uint64, err error) {
 	var stat unix.Statfs_t
 	if err = unix.Statfs(path, &stat); err != nil {
@@ -44,54 +42,6 @@ func diskUsage(path string) (total, used, avail uint64, err error) {
 	return
 }
 
-// chgEntry pairs a directory path with the signed byte change between two snapshots.
-type chgEntry struct {
-	path  string
-	delta int64
-}
-
-// leafFilter removes entries whose change is fully accounted for by the sum of
-// their descendants in the set. A parent is kept when descendants explain less
-// than its total delta (meaning growth/shrink at this level is not attributable
-// to any tracked child alone).
-func leafFilter(entries []chgEntry) []chgEntry {
-	deltas := make(map[string]int64, len(entries))
-	for _, e := range entries {
-		deltas[e.path] = e.delta
-	}
-	out := make([]chgEntry, 0, len(entries))
-	for _, e := range entries {
-		prefix := e.path
-		if prefix != "/" {
-			prefix += "/"
-		}
-		var childSum int64
-		for other, d := range deltas {
-			if other != e.path && strings.HasPrefix(other, prefix) {
-				childSum += d
-			}
-		}
-		// Drop only when descendants fully account for the change.
-		if e.delta > 0 && childSum >= e.delta {
-			continue
-		}
-		if e.delta < 0 && childSum <= e.delta {
-			continue
-		}
-		out = append(out, e)
-	}
-	return out
-}
-
-// runStatus prints a concise status report for the latest snapshot and growth since a baseline.
-//
-// It loads stored snapshots, displays the latest snapshot's timestamp, root, depth, tracked
-// directory count and total snapshots, and — when available — disk usage for the snapshot root.
-// It then shows the top current largest directories and, if a prior snapshot exists, the biggest
-// growths and freed space since either the previous snapshot or the snapshot selected by
-// `--since`. Each section is capped at statusLimit entries (--limit flag, default 5).
-// It returns an error if snapshot listing fails, if no snapshots exist, if --limit is negative,
-// or if the --since flag cannot be parsed.
 func runStatus(_ *cobra.Command, _ []string) error {
 	if statusLimit < 0 {
 		return fmt.Errorf("--limit must be >= 0")
@@ -122,7 +72,6 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Println()
 
-	// Top statusLimit largest leaf directories (ancestors filtered out).
 	type entry struct {
 		path string
 		size int64
@@ -130,7 +79,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	allDirs := make([]entry, 0, len(latest.Dirs))
 	sortedPaths := make([]string, 0, len(latest.Dirs))
 	for p, s := range latest.Dirs {
-		if isSkipped(p) {
+		if pathSkipped(p, latest, nil) {
 			continue
 		}
 		allDirs = append(allDirs, entry{p, s})
@@ -138,7 +87,6 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	sort.Strings(sortedPaths)
 
-	// Binary-search for a child: O(N log N) over the full directory set.
 	largest := make([]entry, 0, len(allDirs))
 	for _, e := range allDirs {
 		prefix := e.path
@@ -146,8 +94,6 @@ func runStatus(_ *cobra.Command, _ []string) error {
 			prefix += "/"
 		}
 		pos := sort.SearchStrings(sortedPaths, prefix)
-		// SearchStrings can land on the path itself when prefix == path (root "/").
-		// Advance past it so we're only checking for actual children.
 		if pos < len(sortedPaths) && sortedPaths[pos] == e.path {
 			pos++
 		}
@@ -174,31 +120,21 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	)
 	fmt.Println()
 
-	// Find baseline snapshot for growth comparison.
 	if len(snaps) < 2 {
 		fmt.Println(ui.Dim("  (Take more snapshots to see growth trends)"))
 		fmt.Println()
 		return nil
 	}
 
-	candidates := snaps[:len(snaps)-1] // all except latest
-	var prev *store.Snapshot
-	var growthLabel, freedLabel string
+	pair, err := resolveComparePair(statusSince)
+	if err != nil {
+		return err
+	}
+	prev := pair.baseline
 
+	var growthLabel, freedLabel string
 	if statusSince != "" {
-		cutoff, err := parseSince(statusSince)
-		if err != nil {
-			return err
-		}
-		// Latest candidate at or before the cutoff.
-		for _, s := range candidates {
-			if !s.TakenAt.After(cutoff) {
-				prev = s
-			}
-		}
-		if prev == nil {
-			// No snapshot old enough; use oldest and note it.
-			prev = candidates[0]
+		if pair.note != "" {
 			note := ui.Dim("(oldest snapshot: " + formatDuration(time.Since(prev.TakenAt).Hours()/24) + ")")
 			growthLabel = fmt.Sprintf("  Growth since %s %s:", statusSince, note)
 			freedLabel = fmt.Sprintf("  Freed since %s %s:", statusSince, note)
@@ -207,50 +143,49 @@ func runStatus(_ *cobra.Command, _ []string) error {
 			freedLabel = fmt.Sprintf("  Freed since %s:", statusSince)
 		}
 	} else {
-		prev = candidates[len(candidates)-1]
 		span := latest.TakenAt.Sub(prev.TakenAt)
 		note := ui.Dim("(" + formatDuration(span.Hours()/24) + ")")
 		growthLabel = fmt.Sprintf("  Growth since last scan %s:", note)
 		freedLabel = fmt.Sprintf("  Freed since last scan %s:", note)
 	}
 
-	var growers, shrinkers []chgEntry
+	var growChanges, shrinkChanges []report.Change
 	for path, after := range latest.Dirs {
-		if isSkipped(path) {
+		if pathSkipped(path, latest, prev) {
 			continue
 		}
 		before := prev.Dirs[path]
 		delta := after - before
 		if delta > 1<<20 {
-			growers = append(growers, chgEntry{path, delta})
+			growChanges = append(growChanges, report.Change{Path: path, Delta: delta})
 		} else if delta < -(1 << 20) {
-			shrinkers = append(shrinkers, chgEntry{path, delta})
+			shrinkChanges = append(shrinkChanges, report.Change{Path: path, Delta: delta})
 		}
 	}
 
-	growers = leafFilter(growers)
-	shrinkers = leafFilter(shrinkers)
+	growChanges = report.LeafFilter(growChanges)
+	shrinkChanges = report.LeafFilter(shrinkChanges)
 
-	sort.Slice(growers, func(i, j int) bool { return growers[i].delta > growers[j].delta })
-	if len(growers) > statusLimit {
-		growers = growers[:statusLimit]
+	sort.Slice(growChanges, func(i, j int) bool { return growChanges[i].Delta > growChanges[j].Delta })
+	if len(growChanges) > statusLimit {
+		growChanges = growChanges[:statusLimit]
 	}
 
-	sort.Slice(shrinkers, func(i, j int) bool { return shrinkers[i].delta < shrinkers[j].delta })
-	if len(shrinkers) > statusLimit {
-		shrinkers = shrinkers[:statusLimit]
+	sort.Slice(shrinkChanges, func(i, j int) bool { return shrinkChanges[i].Delta < shrinkChanges[j].Delta })
+	if len(shrinkChanges) > statusLimit {
+		shrinkChanges = shrinkChanges[:statusLimit]
 	}
 
 	fmt.Println(ui.Header(growthLabel))
-	if len(growers) == 0 {
+	if len(growChanges) == 0 {
 		fmt.Println(ui.Dim("  No significant growth."))
 	} else {
 		ui.PrintTable(
 			[]ui.Column{{Header: "Directory"}, {Header: "Growth", RightAlign: true}},
 			func() [][]string {
-				rows := make([][]string, len(growers))
-				for i, e := range growers {
-					rows[i] = []string{e.path, ui.FormatChange(e.delta)}
+				rows := make([][]string, len(growChanges))
+				for i, e := range growChanges {
+					rows[i] = []string{e.Path, ui.FormatChange(e.Delta)}
 				}
 				return rows
 			}(),
@@ -258,14 +193,14 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Println()
 
-	if len(shrinkers) > 0 {
+	if len(shrinkChanges) > 0 {
 		fmt.Println(ui.Header(freedLabel))
 		ui.PrintTable(
 			[]ui.Column{{Header: "Directory"}, {Header: "Freed", RightAlign: true}},
 			func() [][]string {
-				rows := make([][]string, len(shrinkers))
-				for i, e := range shrinkers {
-					rows[i] = []string{e.path, ui.FormatChange(e.delta)}
+				rows := make([][]string, len(shrinkChanges))
+				for i, e := range shrinkChanges {
+					rows[i] = []string{e.Path, ui.FormatChange(e.Delta)}
 				}
 				return rows
 			}(),

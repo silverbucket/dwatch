@@ -13,20 +13,41 @@ type Snapshot struct {
 	TakenAt time.Time        `json:"taken_at"`
 	Root    string           `json:"root"`
 	Depth   int              `json:"depth"`
+	Skip    []string         `json:"skip,omitempty"`
 	Dirs    map[string]int64 `json:"dirs"`
 }
 
 func Save(dataDir string, snap *Snapshot) (string, error) {
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return "", err
 	}
-	fname := fmt.Sprintf("snap_%s.json", snap.TakenAt.UTC().Format("20060102_150405"))
-	path := filepath.Join(dataDir, fname)
 	data, err := json.Marshal(snap)
 	if err != nil {
 		return "", err
 	}
-	return path, os.WriteFile(path, data, 0644)
+	ts := snap.TakenAt.UTC().Format("20060102_150405")
+	for i := 0; ; i++ {
+		fname := fmt.Sprintf("snap_%s.json", ts)
+		if i > 0 {
+			fname = fmt.Sprintf("snap_%s_%03d.json", ts, i)
+		}
+		path := filepath.Join(dataDir, fname)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			if os.IsExist(err) {
+				continue
+			}
+			return "", err
+		}
+		if _, err := f.Write(data); err != nil {
+			_ = f.Close()
+			return "", err
+		}
+		if err := f.Close(); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
 }
 
 func List(dataDir string) ([]*Snapshot, error) {
@@ -43,8 +64,10 @@ func List(dataDir string) ([]*Snapshot, error) {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
-		snap, err := load(filepath.Join(dataDir, e.Name()))
+		fpath := filepath.Join(dataDir, e.Name())
+		snap, err := load(fpath)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "dwatch: warning: skipping %s: %v\n", e.Name(), err)
 			continue
 		}
 		snaps = append(snaps, snap)
@@ -65,7 +88,7 @@ func Latest(dataDir string) (*Snapshot, error) {
 	return snaps[len(snaps)-1], nil
 }
 
-// LatestBefore returns the newest snapshot taken before t, or nil if none exists.
+// LatestBefore returns the newest snapshot taken strictly before t, or nil if none exists.
 func LatestBefore(dataDir string, t time.Time) (*Snapshot, error) {
 	snaps, err := List(dataDir)
 	if err != nil {
