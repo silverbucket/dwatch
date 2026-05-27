@@ -1,0 +1,18 @@
+---
+description: Git branching and PR workflow for this repo and silverbucket GitHub repos
+alwaysApply: true
+---
+
+# Git and PR workflow
+
+## Before opening or updating a PR
+
+1. **Check merge status first.** If the PR you were going to update is already merged, do not keep pushing to that branch. Fetch `master`, fast-forward to latest `origin/master`, create a **new** branch from `master`, and open a **new** PR.
+
+2. **Always branch from latest `master` for new PRs.** Before creating any new branch or PR, fetch and update `master` to match `origin/master`, then branch from there.
+
+3. **Unmerged branch.** If the existing PR branch is still open and not merged, you may continue committing and pushing to that same branch.
+
+## silverbucket/* GitHub repos
+
+- Do **not** mark pull requests as **draft** unless the work is genuinely incomplete and not ready for review.
