@@ -161,7 +161,9 @@ jobs:
             exit 0
           fi
           BRANCH="chore/bump-version-${VERSION}"
-          git checkout -b "${BRANCH}" origin/master
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -f -b "${BRANCH}" origin/master
           sed -i "s/^VERSION ?=.*/VERSION ?= ${VERSION}/" Makefile
           git add Makefile
           git commit -m "chore: bump VERSION to ${VERSION}"
