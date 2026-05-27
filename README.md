@@ -200,10 +200,12 @@ Ensure **Settings** → **Actions** → **General** → **Workflow permissions**
 
 ### Cut a release
 
-1. **Actions** → **Release** → **Run workflow** (workflow file must be on `master`)
-2. Enter a **new** version (e.g. `1.3.0`) — the workflow refuses tags/releases that already exist
+1. Bump `VERSION` in the **Makefile** on `master` (e.g. `1.3.1`) and merge — this is the single source of truth for `dwatch --version` and release tags
+2. **Actions** → **Release** → **Run workflow** (no version input; reads the Makefile on `master`)
 3. Approve the **release** environment deployment if reviewers are configured
-4. CI checks out `master`, runs tests, builds archives, creates `v1.3.0`, and uploads assets to GitHub Releases
+4. CI checks out `master`, runs tests, builds archives, creates `v1.3.1`, and uploads assets to GitHub Releases
+
+The workflow refuses to publish if that tag or GitHub Release already exists.
 
 
 ## License & credits

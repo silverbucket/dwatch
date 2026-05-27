@@ -1,14 +1,10 @@
 # Cut a release from GitHub: Actions → Release → Run workflow (no local git required).
+# Version is read from VERSION in the Makefile on master — bump it before running.
 # Requires a "release" environment (see README) when using deployment protection.
 name: Release
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Semver version (e.g. 1.3.0 or v1.3.0)"
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -31,15 +27,13 @@ jobs:
       - name: Validate version
         id: meta
         env:
-          INPUT_VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          RAW="$INPUT_VERSION"
-          VERSION="${RAW#v}"
+          VERSION=$(make -s print-version)
           TAG="v${VERSION}"
           if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "Version must be semver (e.g. 1.3.0)"
+            echo "Makefile VERSION must be semver (e.g. 1.3.0), got: ${VERSION}"
             exit 1
           fi
           if git ls-remote --exit-code origin "refs/tags/${TAG}" >/dev/null 2>&1; then
