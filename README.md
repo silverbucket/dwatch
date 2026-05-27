@@ -183,30 +183,6 @@ scan_skip = /dev, /System/Volumes, /net, /home
 
 `scan_skip` is applied at report time, not just at scan time. Adding a path to the skip list removes it from `diff`, `top`, `status`, and `alert` output immediately — even for old snapshots — without needing to re-scan.
 
-## Releasing
-
-Releases are cut from CI on protected `master` — no local `git tag` or push required.
-
-### One-time setup: `release` environment
-
-In the repo on GitHub: **Settings** → **Environments** → **New environment** → name it `release`.
-
-Recommended for a protected `master` branch:
-
-- **Required reviewers** — one or more people must approve before binaries are published
-- **Deployment branches** — limit to `master` only (tags/releases are built from `master` HEAD)
-
-Ensure **Settings** → **Actions** → **General** → **Workflow permissions** is **Read and write**.
-
-### Cut a release
-
-1. Ensure `VERSION` in the **Makefile** on `master` matches the **last published** release (e.g. `1.3.0` after v1.3.0 is out)
-2. **Actions** → **Release** → **Run workflow** — choose **patch** (default), **minor**, or **major**; CI bumps the Makefile (e.g. `1.3.0` + patch → `1.3.1`), commits to `master`, then builds and publishes
-3. Approve the **release** environment deployment if reviewers are configured
-
-The workflow refuses to publish if that tag or GitHub Release already exists.
-
-
 ## License & credits
 
 Released under the [GNU General Public License v3.0](LICENSE).
