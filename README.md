@@ -23,6 +23,18 @@ This builds the binary, installs it to `/usr/local/bin/dwatch`, and copies a def
 make uninstall   # remove the binary
 ```
 
+### Install from a release
+
+Pre-built binaries are attached to each [GitHub release](https://github.com/silverbucket/dwatch/releases) (`linux` arm64/amd64, `darwin` arm64 for Apple Silicon).
+
+```sh
+# Example: Linux arm64 — pick the archive matching your OS/arch
+curl -sL https://github.com/silverbucket/dwatch/releases/download/v1.3.0/dwatch_v1.3.0_linux_arm64.tar.gz | tar -xz
+sudo install -m 755 dwatch /usr/local/bin/dwatch
+```
+
+Verify with `dwatch --version` and `sha256sum -c SHA256SUMS` (checksums are on the release page).
+
 
 ## Quick start
 
@@ -125,7 +137,7 @@ Rank directories by growth within a time window.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-s, --since` | — | Time window (`30min`, `1h`, `2d`, `3w`, `1m`/`1mo`, or `YYYY-MM-DD`); omit to compare against the previous snapshot |
+| `-s, --since` | — | Time window; omit to compare against the previous snapshot |
 | `--by` | `growth` | Sort: `growth` (bytes), `pct` (percentage), `rate` (bytes/day) |
 | `-l, --limit` | `20` | Number of results (`0` = all) |
 

@@ -1,0 +1,58 @@
+# Build cross-platform binaries and attach them to the GitHub Release for a tag.
+# Create a release from the GitHub UI or: git tag v1.3.0 && git push origin v1.3.0
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.21"
+          cache: true
+
+      - name: Run tests
+        run: |
+          go test ./... -count=1
+          go vet ./...
+
+      - name: Build release archives
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          LDFLAGS="-s -w -X dwatch/cmd.Version=${VERSION}"
+          mkdir -p dist
+
+          build() {
+            local goos=$1 goarch=$2
+            local base="dwatch_${TAG}_${goos}_${goarch}"
+            echo "Building ${goos}/${goarch}..."
+            GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -ldflags "${LDFLAGS}" -o dwatch .
+            tar -czf "dist/${base}.tar.gz" dwatch
+            rm dwatch
+            sha256sum "dist/${base}.tar.gz" | tee -a dist/SHA256SUMS
+          }
+
+          build linux arm64
+          build linux amd64
+          build darwin arm64
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.4.2
+        with:
+          files: dist/*
+          generate_release_notes: true
