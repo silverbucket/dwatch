@@ -103,8 +103,6 @@ func runDiff(_ *cobra.Command, _ []string) error {
 		pct := 0.0
 		if before > 0 {
 			pct = float64(c.Delta) / float64(before) * 100
-		} else if after == 0 && before > 0 {
-			pct = -100
 		}
 		rows = append(rows, row{c.Path, before, after, c.Delta, pct})
 	}

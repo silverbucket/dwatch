@@ -21,21 +21,33 @@ func Save(dataDir string, snap *Snapshot) (string, error) {
 	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		return "", err
 	}
-	ts := snap.TakenAt.UTC().Format("20060102_150405")
-	fname := fmt.Sprintf("snap_%s.json", ts)
-	path := filepath.Join(dataDir, fname)
-	for i := 1; ; i++ {
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			break
-		}
-		fname = fmt.Sprintf("snap_%s_%03d.json", ts, i)
-		path = filepath.Join(dataDir, fname)
-	}
 	data, err := json.Marshal(snap)
 	if err != nil {
 		return "", err
 	}
-	return path, os.WriteFile(path, data, 0600)
+	ts := snap.TakenAt.UTC().Format("20060102_150405")
+	for i := 0; ; i++ {
+		fname := fmt.Sprintf("snap_%s.json", ts)
+		if i > 0 {
+			fname = fmt.Sprintf("snap_%s_%03d.json", ts, i)
+		}
+		path := filepath.Join(dataDir, fname)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			if os.IsExist(err) {
+				continue
+			}
+			return "", err
+		}
+		if _, err := f.Write(data); err != nil {
+			_ = f.Close()
+			return "", err
+		}
+		if err := f.Close(); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
 }
 
 func List(dataDir string) ([]*Snapshot, error) {

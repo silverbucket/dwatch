@@ -10,7 +10,17 @@ type Change struct {
 
 // PathSkipped reports whether path matches any skip prefix (exact or child path).
 func PathSkipped(path string, skipList []string) bool {
-	for _, skip := range skipList {
+	for _, raw := range skipList {
+		skip := strings.TrimRight(raw, "/")
+		if skip == "" {
+			skip = "/"
+		}
+		if skip == "/" {
+			if strings.HasPrefix(path, "/") {
+				return true
+			}
+			continue
+		}
 		if path == skip || strings.HasPrefix(path, skip+"/") {
 			return true
 		}

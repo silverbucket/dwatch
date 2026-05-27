@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"dwatch/internal/config"
+	"dwatch/internal/report"
 )
 
 // Version is set at build time via -ldflags "-X dwatch/cmd.Version=x.y.z".
@@ -58,10 +58,5 @@ func init() {
 
 // isSkipped reports whether path is covered by the config skip list alone.
 func isSkipped(path string) bool {
-	for _, skip := range cfg.ScanSkip {
-		if path == skip || strings.HasPrefix(path, skip+"/") {
-			return true
-		}
-	}
-	return false
+	return report.PathSkipped(path, cfg.ScanSkip)
 }

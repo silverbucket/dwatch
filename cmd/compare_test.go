@@ -9,6 +9,8 @@ import (
 
 func TestResolveComparePairSince(t *testing.T) {
 	dir := t.TempDir()
+	prevDataDir := dataDir
+	t.Cleanup(func() { dataDir = prevDataDir })
 	dataDir = dir
 
 	mk := func(at time.Time) {
